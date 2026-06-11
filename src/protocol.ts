@@ -130,6 +130,8 @@ export interface HandshakeContext {
   instanceId?: string | null
   /** Widget instance a configuration panel was opened for. */
   targetInstance?: string | null
+  /** Manifest-local widget id of the target instance (configuration panels). */
+  targetWidget?: string | null
 }
 
 export interface Handshake {
