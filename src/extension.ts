@@ -170,9 +170,17 @@ export class ExtensionClient {
 export function connectExtension(
   opts: ConnectOptions = {}
 ): Promise<ExtensionClient> {
+  // Default transport: postMessage to the embedding window. Origin checks
+  // are relaxed to '*' on the extension side because the host page's origin
+  // may legitimately differ from the extension asset origin (e.g. a host dev
+  // server embedding extension assets served by the Signal K server); the
+  // peer-source check in windowPort still applies, and the host side
+  // enforces a strict origin for the extension's frame.
   const port =
     opts.port ??
-    windowPort((globalThis as unknown as Window).parent as Window)
+    windowPort((globalThis as unknown as Window).parent as Window, {
+      origin: '*'
+    })
   const endpoint = new BusEndpoint({
     port,
     callTimeoutMs: opts.callTimeoutMs,
