@@ -5,6 +5,9 @@ import {
   EVENT_READY,
   Handshake,
   HandshakeContext,
+  RouteData,
+  RoutePoint,
+  RouteSummary,
   RPC_ERRORS,
   RpcError,
   SignalKValueEvent,
@@ -154,6 +157,69 @@ export class ExtensionClient {
     },
     put: (path: string, value: unknown): Promise<unknown> => {
       return this.call('signalk.put', { path, value })
+    }
+  }
+
+  /**
+   * The host's visible routes (capability `routes`). Thin **typed** wrappers over
+   * the host's `route.*` methods — each just delegates to `this.call(...)`, so a
+   * plain-JS extension can call `client.call('route.replace', …)` directly and a
+   * TypeScript extension gets the typed `client.route.replace(…)` sugar with no
+   * behavioural difference. Follow lifecycle + mutations by subscribing to
+   * `route.**` events (`RouteVisibleEvent` / `RouteDirtyEvent` / `RouteSavedEvent`
+   * / `RouteHiddenEvent`). Further operations (rename/point ops) extend this
+   * surface as the capability fills out.
+   */
+  readonly route = {
+    list: async (): Promise<RouteSummary[]> => {
+      const result = (await this.call('route.list')) as {
+        routes?: RouteSummary[]
+      }
+      return result.routes ?? []
+    },
+    create: async (opts: {
+      points: RoutePoint[]
+      name?: string
+      description?: string
+    }): Promise<{ routeId: string; rev: number }> => {
+      // A route needs at least two points to form a segment; the host rejects
+      // fewer with routes.badRequest.
+      return (await this.call('route.create', opts)) as {
+        routeId: string
+        rev: number
+      }
+    },
+    get: async (routeId: string): Promise<RouteData> => {
+      return (await this.call('route.get', { routeId })) as RouteData
+    },
+    replace: async (
+      routeId: string,
+      points: RoutePoint[]
+    ): Promise<{ rev: number }> => {
+      return (await this.call('route.replace', { routeId, points })) as {
+        rev: number
+      }
+    },
+    save: async (
+      routeId: string,
+      opts?: { name?: string; description?: string; dialog?: boolean }
+    ): Promise<{ href: string; rev: number }> => {
+      return (await this.call('route.save', {
+        routeId,
+        ...(opts ?? {})
+      })) as { href: string; rev: number }
+    },
+    show: async (ref: string): Promise<{ routeId: string; rev: number }> => {
+      return (await this.call('route.show', { ref })) as {
+        routeId: string
+        rev: number
+      }
+    },
+    hide: async (routeId: string): Promise<void> => {
+      await this.call('route.hide', { routeId })
+    },
+    delete: async (routeId: string): Promise<void> => {
+      await this.call('route.delete', { routeId })
     }
   }
 

@@ -2,7 +2,13 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { HostConnection } from '../src/host'
 import { connectExtension, ExtensionClient } from '../src/extension'
 import { messagePort } from '../src/port'
-import { RPC_ERRORS, RpcError, SignalKValueEvent } from '../src/protocol'
+import {
+  RPC_ERRORS,
+  RpcError,
+  RouteDirtyEvent,
+  RoutePoint,
+  SignalKValueEvent
+} from '../src/protocol'
 
 const HOST_INFO = {
   host: 'test-host',
@@ -203,5 +209,360 @@ describe('signalk helpers', () => {
     expect(puts).toEqual([
       { path: 'electrical.switches.demo.state', value: true }
     ])
+  })
+})
+
+describe('route helpers', () => {
+  // A tiny in-memory registry mirroring the `routes` capability surface a real
+  // host implements: the visible set (drafts + shown stored routes), each with
+  // an opaque routeId and two flags — `saved` (backed by a resource) and
+  // `dirty` (pending unsaved changes) — plus lifecycle events.
+  interface Buf {
+    name: string | null
+    description: string | null
+    rev: number
+    saved: boolean
+    dirty: boolean
+    points: RoutePoint[]
+  }
+
+  async function routeRig(): Promise<Rig> {
+    const buffers = new Map<string, Buf>()
+    let seq = 0
+    let host: HostConnection
+    const summary = (routeId: string, b: Buf) => ({
+      routeId,
+      name: b.name,
+      rev: b.rev,
+      pointCount: b.points.length,
+      saved: b.saved,
+      dirty: b.dirty
+    })
+    const r = await rig({
+      hostInfo: { ...HOST_INFO, capabilities: [...HOST_INFO.capabilities, 'routes'] },
+      methods: {
+        'route.create': (params) => {
+          const { name, description, points } = (params ?? {}) as {
+            name?: string
+            description?: string
+            points?: RoutePoint[]
+          }
+          if (!points || points.length < 2) {
+            throw new RpcError('a route needs at least two points', {
+              reason: 'routes.badRequest'
+            })
+          }
+          const routeId = `route-${++seq}`
+          const buf: Buf = {
+            name: name ?? null,
+            description: description ?? null,
+            rev: 1,
+            saved: false,
+            dirty: true,
+            points: points ? [...points] : []
+          }
+          buffers.set(routeId, buf)
+          host.publish('route.visible', {
+            routeId,
+            rev: buf.rev,
+            name: buf.name,
+            pointCount: buf.points.length,
+            saved: buf.saved,
+            dirty: buf.dirty
+          })
+          return { routeId, rev: buf.rev }
+        },
+        'route.show': (params) => {
+          const { ref } = (params ?? {}) as { ref?: string }
+          if (!ref) throw new RpcError('missing ref', { reason: 'routes.badRef' })
+          const routeId = `route-${++seq}`
+          const buf: Buf = {
+            name: `Stored ${ref}`,
+            description: null,
+            rev: 1,
+            saved: true,
+            dirty: false,
+            points: [{ position: [0, 0] }]
+          }
+          buffers.set(routeId, buf)
+          host.publish('route.visible', {
+            routeId,
+            rev: buf.rev,
+            name: buf.name,
+            pointCount: buf.points.length,
+            saved: buf.saved,
+            dirty: buf.dirty
+          })
+          return { routeId, rev: buf.rev }
+        },
+        'route.list': () => ({
+          routes: [...buffers].map(([id, b]) => summary(id, b))
+        }),
+        'route.get': (params) => {
+          const { routeId } = params as { routeId: string }
+          const b = buffers.get(routeId)
+          if (!b) throw new RpcError('no such route', { reason: 'routes.unknownId' })
+          return {
+            routeId,
+            name: b.name,
+            description: b.description,
+            rev: b.rev,
+            saved: b.saved,
+            dirty: b.dirty,
+            points: b.points
+          }
+        },
+        'route.replace': (params) => {
+          const { routeId, points } = params as {
+            routeId: string
+            points: RoutePoint[]
+          }
+          const b = buffers.get(routeId)
+          if (!b) throw new RpcError('no such route', { reason: 'routes.unknownId' })
+          b.points = points
+          b.rev++
+          b.dirty = true
+          host.publish('route.dirty', { routeId, rev: b.rev, reason: 'replaced' })
+          return { rev: b.rev }
+        },
+        'route.save': (params) => {
+          const { routeId } = params as { routeId: string }
+          const b = buffers.get(routeId)
+          if (!b) throw new RpcError('no such route', { reason: 'routes.unknownId' })
+          b.rev++
+          b.saved = true
+          b.dirty = false
+          const href = `routes/saved-${routeId}`
+          host.publish('route.saved', {
+            routeId,
+            rev: b.rev,
+            href,
+            name: b.name,
+            saved: b.saved,
+            dirty: b.dirty
+          })
+          return { href, rev: b.rev }
+        },
+        'route.hide': (params) => {
+          const { routeId } = params as { routeId: string }
+          const b = buffers.get(routeId)
+          if (!b) throw new RpcError('no such route', { reason: 'routes.unknownId' })
+          b.rev++
+          // Hiding a saved route leaves the resource intact (saved:true); hiding
+          // an unsaved draft deletes it (saved:false).
+          const saved = b.saved
+          buffers.delete(routeId)
+          host.publish('route.hidden', { routeId, rev: b.rev, saved })
+          return {}
+        },
+        'route.delete': (params) => {
+          const { routeId } = params as { routeId: string }
+          const b = buffers.get(routeId)
+          if (!b) throw new RpcError('no such route', { reason: 'routes.unknownId' })
+          b.rev++
+          // Permanent delete — the route is gone from the store, so it leaves
+          // the visible set as saved:false (not retrievable).
+          buffers.delete(routeId)
+          host.publish('route.hidden', { routeId, rev: b.rev, saved: false })
+          return {}
+        }
+      }
+    })
+    host = r.host
+    return r
+  }
+
+  it('advertises the routes capability', async () => {
+    const { client } = await routeRig()
+    expect(client.hasCapability('routes')).toBe(true)
+  })
+
+  it('creates a draft, emits route.visible (saved:false, dirty:true), round-trips route.get', async () => {
+    const { client } = await routeRig()
+    const events: Array<{ name: string; params: Record<string, unknown> }> = []
+    await client.subscribe(['route.**'], (name, params) =>
+      events.push({ name, params: params as Record<string, unknown> })
+    )
+    const { routeId, rev } = await client.route.create({
+      name: 'Test',
+      points: [{ position: [-80.1, 25.7] }, { position: [-80.2, 25.8] }]
+    })
+    expect(rev).toBe(1)
+    const data = await client.route.get(routeId)
+    expect(data.name).toBe('Test')
+    expect(data.rev).toBe(1)
+    expect(data.saved).toBe(false)
+    expect(data.dirty).toBe(true)
+    expect(data.points).toHaveLength(2)
+    expect(data.points[0].position).toEqual([-80.1, 25.7])
+    await new Promise((r) => setTimeout(r, 20))
+    const visible = events.find((e) => e.name === 'route.visible')
+    expect(visible?.params.routeId).toBe(routeId)
+    expect(visible?.params.pointCount).toBe(2)
+    expect(visible?.params.saved).toBe(false)
+    expect(visible?.params.dirty).toBe(true)
+  })
+
+  it('route.show brings a stored route into the visible set (saved:true, dirty:false)', async () => {
+    const { client } = await routeRig()
+    const visible: Array<Record<string, unknown>> = []
+    await client.subscribe(['route.visible'], (_name, params) =>
+      visible.push(params as Record<string, unknown>)
+    )
+    const { routeId } = await client.route.show('abc-uuid')
+    const data = await client.route.get(routeId)
+    expect(data.saved).toBe(true)
+    expect(data.dirty).toBe(false)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(visible).toHaveLength(1)
+    expect(visible[0].saved).toBe(true)
+    expect(visible[0].dirty).toBe(false)
+  })
+
+  it('lists the visible set and hides a draft, emitting route.hidden (saved:false)', async () => {
+    const { client } = await routeRig()
+    const hidden: Array<Record<string, unknown>> = []
+    await client.subscribe(['route.hidden'], (_name, params) =>
+      hidden.push(params as Record<string, unknown>)
+    )
+    const a = await client.route.create({ name: 'A', points: [{ position: [0, 0] }, { position: [1, 1] }] })
+    const b = await client.route.create({ name: 'B', points: [{ position: [0, 0] }, { position: [1, 1] }] })
+    const list = await client.route.list()
+    expect(list.map((r) => r.routeId).sort()).toEqual(
+      [a.routeId, b.routeId].sort()
+    )
+    await client.route.hide(a.routeId)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(hidden).toHaveLength(1)
+    expect(hidden[0].routeId).toBe(a.routeId)
+    expect(hidden[0].saved).toBe(false)
+    expect((await client.route.list()).map((r) => r.routeId)).toEqual([
+      b.routeId
+    ])
+  })
+
+  it('hiding a stored (saved) route reports saved:true on route.hidden', async () => {
+    const { client } = await routeRig()
+    const hidden: Array<Record<string, unknown>> = []
+    await client.subscribe(['route.hidden'], (_name, params) =>
+      hidden.push(params as Record<string, unknown>)
+    )
+    const { routeId } = await client.route.show('xyz-uuid')
+    await client.route.hide(routeId)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(hidden).toHaveLength(1)
+    expect(hidden[0].saved).toBe(true)
+  })
+
+  it('surfaces an unknown route id as routes.unknownId', async () => {
+    const { client } = await routeRig()
+    const err: RpcError = await client.route.get('nope').catch((e) => e)
+    expect(err.reason).toBe('routes.unknownId')
+  })
+
+  it('delivers route.dirty so a mirror can re-snapshot', async () => {
+    const { host, client } = await routeRig()
+    const { routeId } = await client.route.create({ name: 'X', points: [{ position: [0, 0] }, { position: [1, 1] }] })
+    const seen: RouteDirtyEvent[] = []
+    await client.subscribe(['route.dirty'], (_name, params) =>
+      seen.push(params as RouteDirtyEvent)
+    )
+    expect(host.publish('route.dirty', { routeId, rev: 2, reason: 'replaced' })).toBe(
+      true
+    )
+    await new Promise((r) => setTimeout(r, 20))
+    expect(seen).toHaveLength(1)
+    expect(seen[0].reason).toBe('replaced')
+  })
+
+  it('replaces a buffer via the typed client.route.replace wrapper', async () => {
+    const { client } = await routeRig()
+    const { routeId } = await client.route.create({
+      points: [{ position: [0, 0] }, { position: [0.5, 0.5] }]
+    })
+    const dirty: RouteDirtyEvent[] = []
+    await client.subscribe(['route.dirty'], (_name, params) =>
+      dirty.push(params as RouteDirtyEvent)
+    )
+    const { rev } = await client.route.replace(routeId, [
+      { position: [1, 1] },
+      { position: [2, 2] }
+    ])
+    expect(rev).toBe(2)
+    const data = await client.route.get(routeId)
+    expect(data.points).toHaveLength(2)
+    expect(data.rev).toBe(2)
+    expect(data.dirty).toBe(true)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(dirty).toHaveLength(1)
+    expect(dirty[0].reason).toBe('replaced')
+  })
+
+  it('exposes route.replace through the generic call() too (JS path)', async () => {
+    const { client } = await routeRig()
+    const { routeId } = await client.route.create({ points: [{ position: [0, 0] }, { position: [1, 1] }] })
+    const res = (await client.call('route.replace', {
+      routeId,
+      points: [{ position: [3, 3] }]
+    })) as { rev: number }
+    expect(res.rev).toBe(2)
+  })
+
+  it('persists via client.route.save, emits route.saved, keeps the route visible (saved:true, dirty:false)', async () => {
+    const { client } = await routeRig()
+    const { routeId } = await client.route.create({ name: 'Plan A', points: [{ position: [0, 0] }, { position: [1, 1] }] })
+    const saved: Array<Record<string, unknown>> = []
+    await client.subscribe(['route.saved'], (_name, params) =>
+      saved.push(params as Record<string, unknown>)
+    )
+    const res = await client.route.save(routeId)
+    expect(typeof res.href).toBe('string')
+    expect(res.rev).toBe(2)
+    // The route stays addressable under the same id, now saved + clean.
+    const data = await client.route.get(routeId)
+    expect(data.saved).toBe(true)
+    expect(data.dirty).toBe(false)
+    expect((await client.route.list()).map((r) => r.routeId)).toContain(routeId)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(saved).toHaveLength(1)
+    expect(saved[0].href).toBe(res.href)
+    expect(saved[0].name).toBe('Plan A')
+    expect(saved[0].saved).toBe(true)
+    expect(saved[0].dirty).toBe(false)
+  })
+
+  it('route.create with fewer than two points rejects routes.badRequest', async () => {
+    const { client } = await routeRig()
+    await expect(
+      client.route.create({ points: [{ position: [0, 0] }] })
+    ).rejects.toHaveProperty('reason', 'routes.badRequest')
+  })
+
+  it('route.delete removes a saved route, emitting route.hidden saved:false (gone)', async () => {
+    const { client } = await routeRig()
+    const hidden: Array<Record<string, unknown>> = []
+    await client.subscribe(['route.hidden'], (_name, params) =>
+      hidden.push(params as Record<string, unknown>)
+    )
+    const { routeId } = await client.route.show('to-delete')
+    await client.route.delete(routeId)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(hidden).toHaveLength(1)
+    expect(hidden[0].routeId).toBe(routeId)
+    expect(hidden[0].saved).toBe(false)
+    expect((await client.route.list()).map((r) => r.routeId)).not.toContain(
+      routeId
+    )
+  })
+
+  it('route.create stores a route-level description, returned by route.get', async () => {
+    const { client } = await routeRig()
+    const { routeId } = await client.route.create({
+      name: 'Desc test',
+      description: 'around the shoal',
+      points: [{ position: [0, 0] }, { position: [1, 1] }]
+    })
+    const data = await client.route.get(routeId)
+    expect(data.description).toBe('around the shoal')
   })
 })

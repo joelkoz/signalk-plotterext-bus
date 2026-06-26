@@ -95,9 +95,11 @@ Implemented by `HostConnection` automatically:
 | `events.subscribe` | `{ patterns: string[] }` | `{ subscriptionId }` |
 | `events.unsubscribe` | `{ subscriptionId }` | `{}` |
 
-Host API methods (`state.*`, `signalk.*`, `map.*`, …) are supplied by the
-embedding host application; see the plotter extension specification for the
-vocabulary.
+Host API methods (`state.*`, `signalk.*`, `map.*`, `route.*`, …) are supplied
+by the embedding host application; see the plotter extension specification for
+the vocabulary. The client exposes typed convenience wrappers for some of them
+(`client.state`, `client.signalk`, `client.route`); all are equally reachable
+through the generic `client.call(method, params)`.
 
 ## Usage — extension side
 
@@ -120,6 +122,15 @@ await client.subscribe(['state.changed'], async () => {
   const values = await client.state.get()
   reconfigure(values)
 })
+
+// Live route edit buffers (capability `routes`)
+if (client.hasCapability('routes')) {
+  const { routeId } = await client.route.create({ name: 'Plan A' })
+  await client.subscribe(['route.**'], async (name) => {
+    if (name === 'route.dirty') reseed(await client.route.get(routeId))
+  })
+  console.log(await client.route.list())
+}
 ```
 
 ## Usage — host side

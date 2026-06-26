@@ -75,6 +75,14 @@ specification (proposed to `SignalK/signalk-server` under
 - `signalk.subscribe(paths, handler)`: subscribes to `sk.<path>` events
   *and* calls the host's `signalk.subscribe`; the unsubscribe function
   reverses both. `signalk.put(path, value)` wraps `signalk.put`.
+- `route.*` (capability `routes`): typed wrappers over the host's live route
+  edit-buffer methods. Current surface: `route.list()`, `route.create({ name?,
+  points? })`, `route.get(routeId)`, `route.delete(routeId)`; mutations are
+  followed via `route.**` events (`route.created`/`route.deleted`/`route.dirty`,
+  with `route.dirty` the conformance-floor re-snapshot signal). Point ops,
+  `route.replace`/`route.rename` and `route.save` extend this surface in later
+  work. Authoritative method/event contract lives in the Plotter Extensions API
+  spec ("Live route editing").
 - Default transport posts to `window.parent` with target origin `'*'`,
   filtering received messages by peer source. Rationale: the host page's
   origin may legitimately differ from the extension asset origin (e.g. a
@@ -127,3 +135,6 @@ Must stay covered (vitest, Node, no DOM):
   late, subscription-filtered publish, wildcard subscribe/unsubscribe,
   subscription-change notification, invalid subscribe params, state helper
   round-trip, signalk.subscribe event flow, signalk.put relay.
+- `route.*` helper conformance: `routes` capability advertised,
+  create→`route.created`→`route.get` round-trip, list/delete→`route.deleted`,
+  `routes.unknownId` reason propagation, `route.dirty` delivery via `route.**`.
