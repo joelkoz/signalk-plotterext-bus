@@ -319,6 +319,11 @@ describe('route helpers', () => {
           }
           const b = buffers.get(routeId)
           if (!b) throw new RpcError('no such route', { reason: 'routes.unknownId' })
+          if (!points || points.length < 2) {
+            throw new RpcError('a route needs at least two points', {
+              reason: 'routes.badRequest'
+            })
+          }
           b.points = points
           b.rev++
           b.dirty = true
@@ -503,7 +508,7 @@ describe('route helpers', () => {
     const { routeId } = await client.route.create({ points: [{ position: [0, 0] }, { position: [1, 1] }] })
     const res = (await client.call('route.replace', {
       routeId,
-      points: [{ position: [3, 3] }]
+      points: [{ position: [3, 3] }, { position: [4, 4] }]
     })) as { rev: number }
     expect(res.rev).toBe(2)
   })

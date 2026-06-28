@@ -123,9 +123,13 @@ await client.subscribe(['state.changed'], async () => {
   reconfigure(values)
 })
 
-// Live route edit buffers (capability `routes`)
+// Visible routes (capability `routes`)
 if (client.hasCapability('routes')) {
-  const { routeId } = await client.route.create({ name: 'Plan A' })
+  // A route needs at least two points (one segment).
+  const { routeId } = await client.route.create({
+    name: 'Plan A',
+    points: [{ position: [-80.1, 25.7] }, { position: [-80.2, 25.8] }]
+  })
   await client.subscribe(['route.**'], async (name) => {
     if (name === 'route.dirty') reseed(await client.route.get(routeId))
   })
