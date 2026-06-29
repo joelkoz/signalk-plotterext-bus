@@ -85,7 +85,7 @@ specification (proposed to `SignalK/signalk-server` under
   (`route.visible`/`route.dirty`/`route.saved`/`route.hidden`, with `route.dirty`
   the conformance-floor re-snapshot signal). Failures reject with a stable
   `error.data.reason` from `RouteErrorReason` (`routes.unknownId`/`badRef`/
-  `badRequest`/`saveFailed`/`saveCancelled`/`notSupported`
+  `badRequest`/`saveFailed`/`deleteFailed`/`saveCancelled`/`notSupported`
   — see the README "Route error reasons" table); a server-rejected persist is
   `routes.saveFailed`, distinct from the user-cancel `routes.saveCancelled`.
   Authoritative method/event contract lives in the Plotter Extensions API spec

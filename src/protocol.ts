@@ -261,5 +261,6 @@ export type RouteErrorReason =
   | 'routes.badRequest'
   | 'routes.badRef'
   | 'routes.saveFailed'
+  | 'routes.deleteFailed'
   | 'routes.saveCancelled'
   | 'routes.notSupported'

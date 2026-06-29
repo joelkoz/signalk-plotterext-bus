@@ -114,6 +114,7 @@ may change.
 | `routes.badRef` | `route.show(ref)` was given a ref that resolves to no stored route. |
 | `routes.badRequest` | Malformed params — e.g. fewer than two points, a non-numeric `position`, or non-string name/description metadata. |
 | `routes.saveFailed` | The host attempted to persist the route but the server rejected the write. Distinct from `saveCancelled`. |
+| `routes.deleteFailed` | The host attempted to delete the stored route but the server rejected the request. |
 | `routes.saveCancelled` | The user dismissed the host's save dialog without saving. |
 | `routes.notSupported` | The host does not implement this route operation. |
 
