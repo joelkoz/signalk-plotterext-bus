@@ -75,16 +75,21 @@ specification (proposed to `SignalK/signalk-server` under
 - `signalk.subscribe(paths, handler)`: subscribes to `sk.<path>` events
   *and* calls the host's `signalk.subscribe`; the unsubscribe function
   reverses both. `signalk.put(path, value)` wraps `signalk.put`.
-- `route.*` (capability `routes`): typed wrappers over the host's live route
-  visible-route methods. Surface: `route.list()`, `route.create({ points (≥2),
+- `route.*` (capability `routes`): typed wrappers over the host's visible-route
+  methods. Surface: `route.list()`, `route.create({ points (≥2),
   name?, description? })`, `route.show(ref)`, `route.get(routeId)`,
   `route.replace(routeId, points)`, `route.save(routeId, { name?, description?,
   dialog? })`, `route.hide(routeId)`, `route.delete(routeId)`. A route carries
   `saved` (backed by a stored resource) and `dirty` (pending unsaved changes)
   flags; mutations are followed via `route.**` events
   (`route.visible`/`route.dirty`/`route.saved`/`route.hidden`, with `route.dirty`
-  the conformance-floor re-snapshot signal). Authoritative method/event contract
-  lives in the Plotter Extensions API spec ("Live routes").
+  the conformance-floor re-snapshot signal). Failures reject with a stable
+  `error.data.reason` from `RouteErrorReason` (`routes.unknownId`/`badRef`/
+  `badRequest`/`saveFailed`/`saveCancelled`/`notSupported`
+  — see the README "Route error reasons" table); a server-rejected persist is
+  `routes.saveFailed`, distinct from the user-cancel `routes.saveCancelled`.
+  Authoritative method/event contract lives in the Plotter Extensions API spec
+  ("Live routes").
 - Default transport posts to `window.parent` with target origin `'*'`,
   filtering received messages by peer source. Rationale: the host page's
   origin may legitimately differ from the extension asset origin (e.g. a

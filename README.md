@@ -101,6 +101,22 @@ the vocabulary. The client exposes typed convenience wrappers for some of them
 (`client.state`, `client.signalk`, `client.route`); all are equally reachable
 through the generic `client.call(method, params)`.
 
+### Route error reasons
+
+A failing `route.*` host method rejects with a JSON-RPC error whose
+`error.data.reason` is one of the stable `RouteErrorReason` strings (exported
+from the package). Treat `reason` as the contract; the human-readable `message`
+may change.
+
+| `reason` | Meaning |
+| --- | --- |
+| `routes.unknownId` | No visible route has the supplied `routeId`. |
+| `routes.badRef` | `route.show(ref)` was given a ref that resolves to no stored route. |
+| `routes.badRequest` | Malformed params — e.g. fewer than two points, a non-numeric `position`, or non-string name/description metadata. |
+| `routes.saveFailed` | The host attempted to persist the route but the server rejected the write. Distinct from `saveCancelled`. |
+| `routes.saveCancelled` | The user dismissed the host's save dialog without saving. |
+| `routes.notSupported` | The host does not implement this route operation. |
+
 ## Usage — extension side
 
 ```js

@@ -260,8 +260,6 @@ export type RouteErrorReason =
   | 'routes.unknownId'
   | 'routes.badRequest'
   | 'routes.badRef'
-  | 'routes.badIndex'
-  | 'routes.readonly'
   | 'routes.saveFailed'
   | 'routes.saveCancelled'
   | 'routes.notSupported'
