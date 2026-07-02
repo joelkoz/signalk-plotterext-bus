@@ -95,11 +95,12 @@ Implemented by `HostConnection` automatically:
 | `events.subscribe` | `{ patterns: string[] }` | `{ subscriptionId }` |
 | `events.unsubscribe` | `{ subscriptionId }` | `{}` |
 
-Host API methods (`state.*`, `signalk.*`, `map.*`, `route.*`, …) are supplied
-by the embedding host application; see the plotter extension specification for
-the vocabulary. The client exposes typed convenience wrappers for some of them
-(`client.state`, `client.signalk`, `client.route`); all are equally reachable
-through the generic `client.call(method, params)`.
+Host API methods (`state.*`, `signalk.*`, `map.*`, `route.*`, `chart.*`, …) are
+supplied by the embedding host application; see the plotter extension
+specification for the vocabulary. The client exposes typed convenience wrappers
+for some of them (`client.state`, `client.signalk`, `client.route`,
+`client.chart`); all are equally reachable through the generic
+`client.call(method, params)`.
 
 ### Route error reasons
 
@@ -117,6 +118,18 @@ may change.
 | `routes.deleteFailed` | The host attempted to delete the stored route but the server rejected the request. |
 | `routes.saveCancelled` | The user dismissed the host's save dialog without saving. |
 | `routes.notSupported` | The host does not implement this route operation. |
+
+### Chart error reasons
+
+A failing `chart.*` host method rejects with a JSON-RPC error whose
+`error.data.reason` is one of the stable `ChartErrorReason` strings (exported
+from the package).
+
+| `reason` | Meaning |
+| --- | --- |
+| `charts.unknownId` | No managed chart has one of the supplied ids. |
+| `charts.badRequest` | Malformed params — e.g. a missing `ids` array, a non-boolean `visible`, or an out-of-range `opacity`. |
+| `charts.notSupported` | The host does not implement this chart operation. |
 
 ## Usage — extension side
 
@@ -151,6 +164,19 @@ if (client.hasCapability('routes')) {
     if (name === 'route.dirty') reseed(await client.route.get(routeId))
   })
   console.log(await client.route.list())
+}
+
+// Chart layers (capability `charts`) — a lightweight facade over the charts
+// the host already manages. No creating or deleting; only show/hide, opacity
+// and stacking order.
+if (client.hasCapability('charts')) {
+  const charts = await client.chart.list() // in display order, topmost first
+  // Turn one or more charts on/off in a single batch call.
+  await client.chart.setVisibility([charts[0].id], true)
+  // Follow changes from any origin (including the host's own chart controls).
+  await client.subscribe(['chart.**'], async () => {
+    render(await client.chart.list())
+  })
 }
 ```
 

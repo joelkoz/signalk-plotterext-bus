@@ -90,6 +90,18 @@ specification (proposed to `SignalK/signalk-server` under
   `routes.saveFailed`, distinct from the user-cancel `routes.saveCancelled`.
   Authoritative method/event contract lives in the Plotter Extensions API spec
   ("Live routes").
+- `chart.*` (capability `charts`): typed wrappers over the host's chart-layer
+  management — a lightweight facade, **not** a chart provider (no
+  create/add/delete of sources). Surface: `chart.list()` → `ChartLayer[]` in
+  display order (index 0 topmost), `chart.setVisibility(ids, visible)`,
+  `chart.setOpacity(ids, opacity)`, `chart.setOrder(order)` (all batch;
+  `setOrder` is host-clamped). Changes are followed via `chart.**` events
+  (`chart.visibility`/`chart.opacity`/`chart.order`), emitted for every change
+  regardless of origin (including the host's own chart controls). Failures reject
+  with a stable `error.data.reason` from `ChartErrorReason`
+  (`charts.unknownId`/`badRequest`/`notSupported` — see the README "Chart error
+  reasons" table). Authoritative method/event contract lives in the Plotter
+  Extensions API spec ("Chart layers").
 - Default transport posts to `window.parent` with target origin `'*'`,
   filtering received messages by peer source. Rationale: the host page's
   origin may legitimately differ from the extension asset origin (e.g. a
@@ -148,3 +160,8 @@ Must stay covered (vitest, Node, no DOM):
   `route.save`→`route.saved`,
   `routes.unknownId`/`routes.badRequest`/`routes.badRef` reason propagation,
   `route.dirty` delivery via `route.**`.
+- `chart.*` helper conformance: `charts` capability advertised, `chart.list`
+  order + metadata, batch `chart.setVisibility` emitting one `chart.visibility`
+  per *changed* chart, batch `chart.setOpacity`→`chart.opacity`,
+  `chart.setOrder`→`chart.order` (new full order), `charts.unknownId` reason
+  propagation, generic `call()` path.

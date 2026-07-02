@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.8.0
+
+`charts` capability — a lightweight facade over the chart layers the host
+already manages. `BUS_ID` stays `plotterExt/1` (additive vocabulary; the core
+envelope is unchanged). Minor bump for the new capability.
+
+- **Enumerate + read.** `client.chart.list()` returns the host's chart layers as
+  `ChartLayer[]` in display/stacking order (index 0 = topmost), each with
+  `id` (opaque, host-assigned), `name`, `visible`, `opacity` and best-effort
+  `type` / `bounds` / `minZoom` / `maxZoom`.
+- **Batch mutators.** `client.chart.setVisibility(ids, visible)` turns one or
+  more charts on/off; `client.chart.setOpacity(ids, opacity)` sets opacity for a
+  set; `client.chart.setOrder(order)` reorders (host-clamped — hosts with
+  z-bands / pinning honor the requested relative order within their own
+  constraints). **Not** a chart provider: no create/add/delete of chart sources.
+- **Fine-grained, origin-transparent events.** `chart.visibility`
+  (`{ id, visible }`, one per changed chart), `chart.opacity` (`{ id, opacity }`)
+  and `chart.order` (`{ order }`, the new full order) — emitted for every change
+  regardless of origin, including the user's own chart controls. Follow with
+  `client.subscribe(['chart.**'], …)`.
+- New typed payloads `ChartLayer`, `ChartVisibilityEvent`, `ChartOpacityEvent`,
+  `ChartOrderEvent` and error reasons `ChartErrorReason`
+  (`charts.unknownId` / `charts.badRequest` / `charts.notSupported`).
+
 ## 0.7.0
 
 `routes` capability redesign — the capability now spans the host's **visible

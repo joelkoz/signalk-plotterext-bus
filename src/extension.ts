@@ -1,6 +1,7 @@
 import { BusEndpoint, EventHandler } from './endpoint'
 import { BusPort, windowPort } from './port'
 import {
+  ChartLayer,
   EVENT_HANDSHAKE,
   EVENT_READY,
   Handshake,
@@ -220,6 +221,33 @@ export class ExtensionClient {
     },
     delete: async (routeId: string): Promise<void> => {
       await this.call('route.delete', { routeId })
+    }
+  }
+
+  /**
+   * The host's chart layers (capability `charts`). Thin **typed** wrappers over
+   * the host's `chart.*` methods — a lightweight facade over the charts the host
+   * already manages: enumerate them, toggle visibility, opacity and stacking
+   * order (all batch). It does not create, add, or delete chart sources. Follow
+   * changes (from any origin, including the host's own chart controls) by
+   * subscribing to `chart.**` events (`ChartVisibilityEvent` / `ChartOpacityEvent`
+   * / `ChartOrderEvent`) and re-reading `chart.list` where needed. As with every
+   * wrapper, a plain-JS extension can call `client.call('chart.list', …)`
+   * directly with no behavioural difference.
+   */
+  readonly chart = {
+    list: async (): Promise<ChartLayer[]> => {
+      const result = (await this.call('chart.list')) as { charts?: ChartLayer[] }
+      return result.charts ?? []
+    },
+    setVisibility: async (ids: string[], visible: boolean): Promise<void> => {
+      await this.call('chart.setVisibility', { ids, visible })
+    },
+    setOpacity: async (ids: string[], opacity: number): Promise<void> => {
+      await this.call('chart.setOpacity', { ids, opacity })
+    },
+    setOrder: async (order: string[]): Promise<void> => {
+      await this.call('chart.setOrder', { order })
     }
   }
 

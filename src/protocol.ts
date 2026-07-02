@@ -264,3 +264,69 @@ export type RouteErrorReason =
   | 'routes.deleteFailed'
   | 'routes.saveCancelled'
   | 'routes.notSupported'
+
+/**
+ * Types for the `charts` capability — a lightweight facade over the chart
+ * layers the host already manages. An extension enumerates them, reads which
+ * are shown and in what stacking order, and toggles visibility, opacity and
+ * order. It does **not** add, create, or delete chart sources — only manages
+ * charts the host already knows about. Follow changes (from any origin,
+ * including the user's own chart controls) via the `chart.visibility` /
+ * `chart.opacity` / `chart.order` events. See the Plotter Extensions API spec,
+ * "Chart layers".
+ */
+
+/**
+ * One chart layer the host manages — an entry in a `chart.list` result. The
+ * array order is the display/stacking order (index 0 = topmost/frontmost).
+ */
+export interface ChartLayer {
+  /** Opaque, stable, host-assigned id. Treat as a token; never parse it. */
+  id: string
+  /** Human-readable chart name. */
+  name: string
+  /** Whether the chart is currently displayed. */
+  visible: boolean
+  /** Display opacity, 0..1. */
+  opacity: number
+  /** Best-effort source kind, e.g. 'raster' | 'vector' | 'S-57' | 'WMS'. */
+  type?: string
+  /** Geographic extent `[minLon, minLat, maxLon, maxLat]`, when known. */
+  bounds?: [number, number, number, number]
+  /** Minimum usable zoom level, when known. */
+  minZoom?: number
+  /** Maximum usable zoom level, when known. */
+  maxZoom?: number
+}
+
+/**
+ * Payload of a `chart.visibility` host event — one chart's display was turned
+ * on or off. A batch `chart.setVisibility` emits one event per changed chart,
+ * as does the user toggling a chart in the host's own chart controls.
+ */
+export interface ChartVisibilityEvent {
+  id: string
+  visible: boolean
+}
+
+/** Payload of a `chart.opacity` host event — one chart's opacity changed. */
+export interface ChartOpacityEvent {
+  id: string
+  /** New opacity, 0..1. */
+  opacity: number
+}
+
+/**
+ * Payload of a `chart.order` host event — the display/stacking order changed.
+ * `order` is the new full order, topmost first (the same order `chart.list`
+ * returns).
+ */
+export interface ChartOrderEvent {
+  order: string[]
+}
+
+/** Stable `error.data.reason` strings for `chart.*` host-method failures. */
+export type ChartErrorReason =
+  | 'charts.unknownId'
+  | 'charts.badRequest'
+  | 'charts.notSupported'

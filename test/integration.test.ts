@@ -3,6 +3,10 @@ import { HostConnection } from '../src/host'
 import { connectExtension, ExtensionClient } from '../src/extension'
 import { messagePort } from '../src/port'
 import {
+  ChartLayer,
+  ChartOpacityEvent,
+  ChartOrderEvent,
+  ChartVisibilityEvent,
   RPC_ERRORS,
   RpcError,
   RouteDirtyEvent,
@@ -569,5 +573,198 @@ describe('route helpers', () => {
     })
     const data = await client.route.get(routeId)
     expect(data.description).toBe('around the shoal')
+  })
+})
+
+describe('chart helpers', () => {
+  // A tiny in-memory registry mirroring the `charts` capability surface a real
+  // host implements: the chart layers the host already manages, held in
+  // top-to-bottom display order, each with an opaque id, a visible flag and an
+  // opacity. Mutations are batch and emit per-chart / whole-order events.
+  interface ChartRec {
+    id: string
+    name: string
+    visible: boolean
+    opacity: number
+    type?: string
+    bounds?: [number, number, number, number]
+    minZoom?: number
+    maxZoom?: number
+  }
+
+  async function chartRig(): Promise<Rig> {
+    // Seeded top-to-bottom (index 0 = topmost).
+    const order: string[] = ['osm', 'noaa-12345', 's57-1']
+    const charts = new Map<string, ChartRec>([
+      ['osm', { id: 'osm', name: 'OpenStreetMap', visible: true, opacity: 1, type: 'raster' }],
+      [
+        'noaa-12345',
+        {
+          id: 'noaa-12345',
+          name: 'NOAA 12345',
+          visible: false,
+          opacity: 1,
+          type: 'raster',
+          bounds: [-80.5, 25.5, -80.0, 26.0],
+          minZoom: 4,
+          maxZoom: 18
+        }
+      ],
+      ['s57-1', { id: 's57-1', name: 'ENC US5FL', visible: true, opacity: 0.8, type: 'S-57' }]
+    ])
+    let host: HostConnection
+    const snapshot = (id: string): ChartLayer => {
+      const c = charts.get(id)!
+      return {
+        id: c.id,
+        name: c.name,
+        visible: c.visible,
+        opacity: c.opacity,
+        ...(c.type ? { type: c.type } : {}),
+        ...(c.bounds ? { bounds: c.bounds } : {}),
+        ...(c.minZoom !== undefined ? { minZoom: c.minZoom } : {}),
+        ...(c.maxZoom !== undefined ? { maxZoom: c.maxZoom } : {})
+      }
+    }
+    const r = await rig({
+      hostInfo: { ...HOST_INFO, capabilities: [...HOST_INFO.capabilities, 'charts'] },
+      methods: {
+        'chart.list': () => ({ charts: order.map(snapshot) }),
+        'chart.setVisibility': (params) => {
+          const { ids, visible } = (params ?? {}) as {
+            ids?: string[]
+            visible?: boolean
+          }
+          if (!Array.isArray(ids) || typeof visible !== 'boolean') {
+            throw new RpcError('ids[] and visible required', {
+              reason: 'charts.badRequest'
+            })
+          }
+          for (const id of ids) {
+            const c = charts.get(id)
+            if (!c) throw new RpcError('no such chart', { reason: 'charts.unknownId' })
+            if (c.visible !== visible) {
+              c.visible = visible
+              host.publish('chart.visibility', { id, visible })
+            }
+          }
+          return {}
+        },
+        'chart.setOpacity': (params) => {
+          const { ids, opacity } = (params ?? {}) as {
+            ids?: string[]
+            opacity?: number
+          }
+          if (!Array.isArray(ids) || typeof opacity !== 'number') {
+            throw new RpcError('ids[] and opacity required', {
+              reason: 'charts.badRequest'
+            })
+          }
+          for (const id of ids) {
+            const c = charts.get(id)
+            if (!c) throw new RpcError('no such chart', { reason: 'charts.unknownId' })
+            c.opacity = opacity
+            host.publish('chart.opacity', { id, opacity })
+          }
+          return {}
+        },
+        'chart.setOrder': (params) => {
+          const { order: next } = (params ?? {}) as { order?: string[] }
+          if (!Array.isArray(next) || next.some((id) => !charts.has(id))) {
+            throw new RpcError('order must reference known charts', {
+              reason: 'charts.badRequest'
+            })
+          }
+          // Named ids take the requested relative order at the top; any chart the
+          // caller omitted keeps its existing relative position after them.
+          const rest = order.filter((id) => !next.includes(id))
+          order.splice(0, order.length, ...next, ...rest)
+          host.publish('chart.order', { order: [...order] })
+          return {}
+        }
+      }
+    })
+    host = r.host
+    return r
+  }
+
+  it('advertises the charts capability', async () => {
+    const { client } = await chartRig()
+    expect(client.hasCapability('charts')).toBe(true)
+  })
+
+  it('lists chart layers in display order with metadata', async () => {
+    const { client } = await chartRig()
+    const list = await client.chart.list()
+    expect(list.map((c) => c.id)).toEqual(['osm', 'noaa-12345', 's57-1'])
+    const noaa = list.find((c) => c.id === 'noaa-12345')!
+    expect(noaa.visible).toBe(false)
+    expect(noaa.type).toBe('raster')
+    expect(noaa.bounds).toEqual([-80.5, 25.5, -80.0, 26.0])
+    expect(noaa.minZoom).toBe(4)
+    const s57 = list.find((c) => c.id === 's57-1')!
+    expect(s57.opacity).toBe(0.8)
+  })
+
+  it('toggles visibility for a set of charts and emits one chart.visibility per change', async () => {
+    const { client } = await chartRig()
+    const seen: ChartVisibilityEvent[] = []
+    await client.subscribe(['chart.visibility'], (_name, params) =>
+      seen.push(params as ChartVisibilityEvent)
+    )
+    // osm is already visible; only noaa-12345 changes.
+    await client.chart.setVisibility(['osm', 'noaa-12345'], true)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(seen).toEqual([{ id: 'noaa-12345', visible: true }])
+    const list = await client.chart.list()
+    expect(list.find((c) => c.id === 'noaa-12345')!.visible).toBe(true)
+  })
+
+  it('sets opacity for a set of charts and emits chart.opacity', async () => {
+    const { client } = await chartRig()
+    const seen: ChartOpacityEvent[] = []
+    await client.subscribe(['chart.opacity'], (_name, params) =>
+      seen.push(params as ChartOpacityEvent)
+    )
+    await client.chart.setOpacity(['osm', 's57-1'], 0.5)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(seen).toEqual([
+      { id: 'osm', opacity: 0.5 },
+      { id: 's57-1', opacity: 0.5 }
+    ])
+    const list = await client.chart.list()
+    expect(list.find((c) => c.id === 'osm')!.opacity).toBe(0.5)
+  })
+
+  it('reorders charts and emits chart.order with the new full order', async () => {
+    const { client } = await chartRig()
+    const seen: ChartOrderEvent[] = []
+    await client.subscribe(['chart.order'], (_name, params) =>
+      seen.push(params as ChartOrderEvent)
+    )
+    // Bring the S-57 chart to the top; omitted charts keep their relative order.
+    await client.chart.setOrder(['s57-1'])
+    await new Promise((r) => setTimeout(r, 20))
+    expect(seen).toHaveLength(1)
+    expect(seen[0].order).toEqual(['s57-1', 'osm', 'noaa-12345'])
+    const list = await client.chart.list()
+    expect(list.map((c) => c.id)).toEqual(['s57-1', 'osm', 'noaa-12345'])
+  })
+
+  it('surfaces an unknown chart id as charts.unknownId', async () => {
+    const { client } = await chartRig()
+    const err: RpcError = await client.chart
+      .setVisibility(['nope'], true)
+      .catch((e) => e)
+    expect(err.reason).toBe('charts.unknownId')
+  })
+
+  it('exposes chart.setVisibility through the generic call() too (JS path)', async () => {
+    const { client } = await chartRig()
+    const res = await client.call('chart.setVisibility', {
+      ids: ['noaa-12345'],
+      visible: true
+    })
+    expect(res).toEqual({})
   })
 })
