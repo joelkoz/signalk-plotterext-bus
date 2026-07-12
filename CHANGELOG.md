@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.10.0
+
+Reverse embedding — support a plotter running **inside** an iframe embedded by
+another application (an "embedding host", e.g. KIP hosting Freeboard-SK). The
+plotter stays the API host but points its port at `window.parent`; the embedding
+host is the caller and initiates the handshake. `BUS_ID` stays `plotterExt/1`
+(additive field + a new context kind; the envelope is unchanged). Minor bump.
+
+- **New context kind `embedding-host`** (`ContextKind`), with `instanceId: null`.
+- **Optional `bus.ready` payload `{ id? }`** (`ReadyParams`) — a caller may assert
+  its own context id. Additive and backward-compatible: a host that predates it
+  ignores it.
+- **`HostConnection` option `adoptCallerId`** — when true, the host adopts the
+  caller-asserted `id` as `context.id` (falling back to its configured id when
+  the caller sends none). Default false: the standard extension case is
+  unchanged, host-configured id authoritative.
+- **`connectExtension` option `id`** — sends the caller-asserted id in `bus.ready`.
+  Omit for the standard extension case.
+
 ## 0.9.0
 
 `nightMode` capability — read, set and follow the host's night-vision display

@@ -68,8 +68,12 @@ patterns use eventemitter2-style wildcards: `*` matches exactly one segment,
 
 ### Connection establishment
 
-1. The extension sends the notification `bus.ready` (repeating every ~250 ms
-   until answered, in case the host attaches late).
+1. The **caller** sends the notification `bus.ready` (repeating every ~250 ms
+   until answered, in case the host attaches late). The caller is normally an
+   extension iframe; in a **reverse-embedding** setup it is the application
+   embedding the plotter (see *Embedding hosts* below). A caller may include an
+   optional `id` in the `bus.ready` payload — the host adopts it as `context.id`
+   when configured to (`adoptCallerId`), otherwise ignores it.
 2. The host replies with the notification `bus.handshake`:
 
 ```json
@@ -85,6 +89,21 @@ patterns use eventemitter2-style wildcards: `*` matches exactly one segment,
   }
 }
 ```
+
+`context.kind` is `panel`, `widget`, `background` or `embedding-host`.
+
+### Embedding hosts (reverse embedding)
+
+The roles above are symmetric in the transport: the **host** owns the API
+methods/events and the **caller** invokes them. Normally the plotter is the host
+and the top-level page, embedding each extension in a child iframe. The bus also
+supports the reverse — the plotter runs inside an iframe embedded by another
+application (an "embedding host") that drives it as a caller. The plotter stays
+the API host but now directs its port at `window.parent`; the embedding host is
+the caller and initiates the handshake, and identifies itself with an `id` in
+its `bus.ready` payload. Construct the host side with `adoptCallerId: true` so it
+uses that id as `context.id` (`kind: 'embedding-host'`); connect the caller with
+`connectExtension({ port, id })`. The wire format is otherwise identical.
 
 ### Built-in methods
 

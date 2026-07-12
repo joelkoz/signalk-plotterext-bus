@@ -7,6 +7,7 @@ import {
   Handshake,
   HandshakeContext,
   NightModeState,
+  ReadyParams,
   RouteData,
   RoutePoint,
   RouteSummary,
@@ -19,6 +20,12 @@ import {
 export interface ConnectOptions {
   /** Transport. Defaults to window.postMessage to window.parent. */
   port?: BusPort
+  /**
+   * Caller-asserted context id, sent in the `bus.ready` payload. A host that
+   * adopts caller ids (an embedding-host connection) uses it as `context.id`;
+   * standard extension hosts ignore it. Omit for the standard extension case.
+   */
+  id?: string
   /** Interval for re-sending bus.ready until the handshake arrives. */
   readyIntervalMs?: number
   /** How long to wait for the host handshake before rejecting. */
@@ -300,6 +307,7 @@ export function connectExtension(
     callTimeoutMs: opts.callTimeoutMs,
     onError: opts.onError
   })
+  const readyParams: ReadyParams | undefined = opts.id ? { id: opts.id } : undefined
   return new Promise<ExtensionClient>((resolve, reject) => {
     let done = false
     const off = endpoint.onEvent([EVENT_HANDSHAKE], (_name, params) => {
@@ -309,7 +317,7 @@ export function connectExtension(
       resolve(new ExtensionClient(endpoint, params as Handshake))
     })
     const interval = setInterval(
-      () => endpoint.notify(EVENT_READY),
+      () => endpoint.notify(EVENT_READY, readyParams),
       opts.readyIntervalMs ?? 250
     )
     const timeout = setTimeout(() => {
@@ -329,7 +337,7 @@ export function connectExtension(
       clearInterval(interval)
       clearTimeout(timeout)
     }
-    endpoint.notify(EVENT_READY)
+    endpoint.notify(EVENT_READY, readyParams)
   })
 }
 

@@ -38,15 +38,22 @@ specification (proposed to `SignalK/signalk-server` under
 
 ## 3. Connection establishment
 
-- The extension sends the `bus.ready` notification immediately on connect
+- The caller sends the `bus.ready` notification immediately on connect
   and repeats it (default every 250 ms) until answered or a timeout
-  (default 10 s) rejects the connect promise.
+  (default 10 s) rejects the connect promise. The `bus.ready` payload is
+  optional and additive: `{ id? }`, a caller-asserted context id.
 - The host answers every `bus.ready` with a `bus.handshake` notification
   carrying `{ host, hostVersion, apiVersion, capabilities, context }`.
-- `context`: `{ kind: 'panel'|'widget'|'background', id, instanceId?,
-  targetInstance?, targetWidget? }`. `instanceId` identifies a placed widget
-  instance; `targetInstance`/`targetWidget` identify the widget a
+- `context`: `{ kind: 'panel'|'widget'|'background'|'embedding-host', id,
+  instanceId?, targetInstance?, targetWidget? }`. `instanceId` identifies a
+  placed widget instance; `targetInstance`/`targetWidget` identify the widget a
   configuration panel was opened for.
+- **Caller id adoption.** A host constructed with `adoptCallerId: true` uses the
+  `id` from the `bus.ready` payload as `context.id` (falling back to its own
+  configured id when the caller sends none). This serves `embedding-host`
+  connections, where the host does not know the caller in advance. The default
+  is false: the host-configured `context.id` is authoritative and the payload is
+  ignored (the standard extension case).
 - Either side may come up first; the retry loop makes load order irrelevant.
 
 ## 4. Host endpoint (`HostConnection`)
