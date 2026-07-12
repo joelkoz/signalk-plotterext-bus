@@ -102,6 +102,17 @@ specification (proposed to `SignalK/signalk-server` under
   (`charts.unknownId`/`badRequest`/`notSupported` — see the README "Chart error
   reasons" table). Authoritative method/event contract lives in the Plotter
   Extensions API spec ("Chart layers").
+- `nightMode.*` (capability `nightMode`): typed wrappers over the host's
+  night-vision display state. Surface: `nightMode.get()` → `NightModeState`
+  (`{ enabled, auto }`) and `nightMode.set({ enabled?, auto? })`. Three effective
+  states — force on (`{ enabled: true }`), force off (`{ enabled: false }`),
+  follow the server (`{ auto: true }`); setting `enabled` implies `auto: false`.
+  Changes are followed via the `nightMode.changed` event (`NightModeChangedEvent`),
+  emitted for every change regardless of origin (an extension's set, the host's own
+  toggle, or the server's `environment.mode` flipping while `auto` is on). Failures
+  reject with a stable `error.data.reason` from `NightModeErrorReason`
+  (`nightMode.badRequest`/`notSupported`). Authoritative method/event contract lives
+  in the Plotter Extensions API spec ("Night mode").
 - Default transport posts to `window.parent` with target origin `'*'`,
   filtering received messages by peer source. Rationale: the host page's
   origin may legitimately differ from the extension asset origin (e.g. a
@@ -165,3 +176,8 @@ Must stay covered (vitest, Node, no DOM):
   per *changed* chart, batch `chart.setOpacity`→`chart.opacity`,
   `chart.setOrder`→`chart.order` (new full order), `charts.unknownId` reason
   propagation, generic `call()` path.
+- `nightMode.*` helper conformance: `nightMode` capability advertised,
+  `nightMode.get` returns `{ enabled, auto }`, force on / force off (off wins
+  even while `auto`+server say night), follow-server derives `enabled` from
+  `environment.mode` and re-emits `nightMode.changed` on a server-mode flip,
+  `nightMode.badRequest` on an empty set, generic `call()` path.

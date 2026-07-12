@@ -330,3 +330,38 @@ export type ChartErrorReason =
   | 'charts.unknownId'
   | 'charts.badRequest'
   | 'charts.notSupported'
+
+/**
+ * Types for the `nightMode` capability — the host's night-vision display mode
+ * (a dimmed, low-blue appearance for use after dark). An extension reads the
+ * current state, changes it, and follows changes so an embedded panel matches
+ * the host instead of glowing white on a dark bridge. See the Plotter
+ * Extensions API spec, "Night mode".
+ */
+
+/**
+ * The host's night-mode state — the `nightMode.get` result and the payload of
+ * the `nightMode.changed` event.
+ */
+export interface NightModeState {
+  /** Whether night mode is currently applied (the resolved state the user sees). */
+  enabled: boolean
+  /**
+   * Whether the host is deriving `enabled` from the server's `environment.mode`
+   * (`night` -> on). While `true`, `enabled` tracks the server automatically.
+   */
+  auto: boolean
+}
+
+/**
+ * Payload of a `nightMode.changed` host event — the night-mode state changed.
+ * Emitted **origin-transparently** for every change: an extension's own
+ * `nightMode.set`, the user toggling the host's night-mode control, or the
+ * server's `environment.mode` flipping while `auto` is on.
+ */
+export type NightModeChangedEvent = NightModeState
+
+/** Stable `error.data.reason` strings for `nightMode.*` host-method failures. */
+export type NightModeErrorReason =
+  | 'nightMode.badRequest'
+  | 'nightMode.notSupported'

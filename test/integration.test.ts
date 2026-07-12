@@ -7,6 +7,7 @@ import {
   ChartOpacityEvent,
   ChartOrderEvent,
   ChartVisibilityEvent,
+  NightModeChangedEvent,
   RPC_ERRORS,
   RpcError,
   RouteDirtyEvent,
@@ -766,5 +767,133 @@ describe('chart helpers', () => {
       visible: true
     })
     expect(res).toEqual({})
+  })
+})
+
+describe('nightMode helpers', () => {
+  // A tiny in-memory host mirroring the `nightMode` capability: a resolved
+  // `enabled` flag plus an `auto` flag that, when set, derives `enabled` from
+  // the server's environment.mode. Every change publishes nightMode.changed.
+  interface NightRig extends Rig {
+    setServerMode: (mode: 'day' | 'night') => void
+  }
+
+  async function nightRig(
+    initial: { enabled?: boolean; auto?: boolean; serverMode?: 'day' | 'night' } = {}
+  ): Promise<NightRig> {
+    const state = { enabled: initial.enabled ?? false, auto: initial.auto ?? false }
+    let serverMode: 'day' | 'night' = initial.serverMode ?? 'day'
+    let host: HostConnection
+    const snapshot = () => ({ enabled: state.enabled, auto: state.auto })
+    const publishChanged = () => host.publish('nightMode.changed', snapshot())
+    // Resolve enabled from the server when auto is on; used by set({auto}) and
+    // by a server-mode change while auto is on.
+    const applyAuto = () => {
+      if (state.auto) state.enabled = serverMode === 'night'
+    }
+    const r = (await rig({
+      hostInfo: {
+        ...HOST_INFO,
+        capabilities: [...HOST_INFO.capabilities, 'nightMode']
+      },
+      methods: {
+        'nightMode.get': () => snapshot(),
+        'nightMode.set': (params) => {
+          const p = (params ?? {}) as { enabled?: unknown; auto?: unknown }
+          const hasEnabled = p.enabled !== undefined
+          const hasAuto = p.auto !== undefined
+          if (!hasEnabled && !hasAuto) {
+            throw new RpcError('enabled or auto required', {
+              reason: 'nightMode.badRequest'
+            })
+          }
+          if (
+            (hasEnabled && typeof p.enabled !== 'boolean') ||
+            (hasAuto && typeof p.auto !== 'boolean')
+          ) {
+            throw new RpcError('enabled/auto must be boolean', {
+              reason: 'nightMode.badRequest'
+            })
+          }
+          const before = snapshot()
+          if (hasAuto) state.auto = p.auto as boolean
+          if (hasEnabled) {
+            // Manual set is an override: it takes the display off the server.
+            state.auto = false
+            state.enabled = p.enabled as boolean
+          } else if (hasAuto && state.auto) {
+            applyAuto()
+          }
+          if (before.enabled !== state.enabled || before.auto !== state.auto) {
+            publishChanged()
+          }
+          return {}
+        }
+      }
+    })) as NightRig
+    host = r.host
+    r.setServerMode = (mode) => {
+      serverMode = mode
+      const before = snapshot()
+      applyAuto()
+      if (before.enabled !== state.enabled) publishChanged()
+    }
+    return r
+  }
+
+  it('advertises the nightMode capability', async () => {
+    const { client } = await nightRig()
+    expect(client.hasCapability('nightMode')).toBe(true)
+  })
+
+  it('get returns the current { enabled, auto } state', async () => {
+    const { client } = await nightRig({ enabled: true, auto: true })
+    expect(await client.nightMode.get()).toEqual({ enabled: true, auto: true })
+  })
+
+  it('force on: set({ enabled: true }) applies night and clears auto, emitting changed', async () => {
+    const { client } = await nightRig({ enabled: false, auto: true })
+    const events: NightModeChangedEvent[] = []
+    await client.subscribe(['nightMode.changed'], (_n, p) =>
+      events.push(p as NightModeChangedEvent)
+    )
+    await client.nightMode.set({ enabled: true })
+    expect(await client.nightMode.get()).toEqual({ enabled: true, auto: false })
+    expect(events.at(-1)).toEqual({ enabled: true, auto: false })
+  })
+
+  it('force off: set({ enabled: false }) turns night off even while auto+server say night', async () => {
+    const { client } = await nightRig({ enabled: true, auto: true, serverMode: 'night' })
+    await client.nightMode.set({ enabled: false })
+    expect(await client.nightMode.get()).toEqual({ enabled: false, auto: false })
+  })
+
+  it('follow server: set({ auto: true }) derives enabled from environment.mode', async () => {
+    const { client, setServerMode } = await nightRig({ serverMode: 'night' })
+    await client.nightMode.set({ auto: true })
+    expect(await client.nightMode.get()).toEqual({ enabled: true, auto: true })
+    // Origin-transparent: a server mode flip while auto is on emits changed.
+    const events: NightModeChangedEvent[] = []
+    await client.subscribe(['nightMode.changed'], (_n, p) =>
+      events.push(p as NightModeChangedEvent)
+    )
+    setServerMode('day')
+    await new Promise((r) => setTimeout(r, 20))
+    expect(await client.nightMode.get()).toEqual({ enabled: false, auto: true })
+    expect(events.at(-1)).toEqual({ enabled: false, auto: true })
+  })
+
+  it('rejects an empty set with nightMode.badRequest', async () => {
+    const { client } = await nightRig()
+    const err = await client.nightMode.set({}).catch((e: RpcError) => e)
+    expect(err).toBeInstanceOf(RpcError)
+    expect((err as RpcError).reason).toBe('nightMode.badRequest')
+  })
+
+  it('exposes nightMode.set through the generic call() too (JS path)', async () => {
+    const { client } = await nightRig()
+    const res = await client.call('nightMode.set', { enabled: true })
+    expect(res).toEqual({})
+    expect(await client.call('nightMode.get')).toEqual({ enabled: true, auto: false })
   })
 })

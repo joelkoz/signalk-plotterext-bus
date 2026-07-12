@@ -6,6 +6,7 @@ import {
   EVENT_READY,
   Handshake,
   HandshakeContext,
+  NightModeState,
   RouteData,
   RoutePoint,
   RouteSummary,
@@ -248,6 +249,25 @@ export class ExtensionClient {
     },
     setOrder: async (order: string[]): Promise<void> => {
       await this.call('chart.setOrder', { order })
+    }
+  }
+
+  /**
+   * The host's night-vision display mode (capability `nightMode`). Read the
+   * current `{ enabled, auto }` state, change it, and follow changes by
+   * subscribing to the `nightMode.changed` event (`NightModeChangedEvent`).
+   * `set` expresses the three states the spec defines: force on
+   * (`{ enabled: true }`), force off (`{ enabled: false }`), follow the server
+   * (`{ auto: true }`); setting `enabled` implies `auto: false`. As with every
+   * wrapper, a plain-JS extension can call `client.call('nightMode.get' |
+   * 'nightMode.set', …)` directly with no behavioural difference.
+   */
+  readonly nightMode = {
+    get: async (): Promise<NightModeState> => {
+      return (await this.call('nightMode.get')) as NightModeState
+    },
+    set: async (state: Partial<NightModeState>): Promise<void> => {
+      await this.call('nightMode.set', state)
     }
   }
 

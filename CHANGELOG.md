@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.9.0
+
+`nightMode` capability — read, set and follow the host's night-vision display
+mode (the dimmed, low-blue "night" appearance marine plotters use after dark).
+`BUS_ID` stays `plotterExt/1` (additive vocabulary; the core envelope is
+unchanged). Minor bump for the new capability.
+
+- **Read.** `client.nightMode.get()` returns `NightModeState`
+  (`{ enabled, auto }`): `enabled` is whether night mode is currently applied
+  (the resolved state), `auto` is whether the host is deriving it from the
+  server's `environment.mode`.
+- **Set — three effective states.** `client.nightMode.set({ enabled?, auto? })`:
+  force on (`{ enabled: true }`), force off (`{ enabled: false }`), or follow the
+  server (`{ auto: true }`). Setting `enabled` is a manual override — it implies
+  `auto: false`, so an explicit off wins even while the server says night.
+- **Origin-transparent event.** `nightMode.changed` (`{ enabled, auto }`) is
+  emitted for every change regardless of origin — an extension's own `set`, the
+  user toggling the host's night-mode control, or the server's `environment.mode`
+  flipping while `auto` is on. Follow with
+  `client.subscribe(['nightMode.changed'], …)`.
+- New typed payloads `NightModeState`, `NightModeChangedEvent` and error reasons
+  `NightModeErrorReason` (`nightMode.badRequest` / `nightMode.notSupported`).
+
 ## 0.8.0
 
 `charts` capability — a lightweight facade over the chart layers the host

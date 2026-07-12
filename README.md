@@ -131,6 +131,16 @@ from the package).
 | `charts.badRequest` | Malformed params — e.g. a missing `ids` array, a non-boolean `visible`, or an out-of-range `opacity`. |
 | `charts.notSupported` | The host does not implement this chart operation. |
 
+### Night-mode error reasons
+
+A failing `nightMode.*` host method rejects with a JSON-RPC error whose
+`error.data.reason` is one of the stable `NightModeErrorReason` strings.
+
+| `reason` | Meaning |
+| --- | --- |
+| `nightMode.badRequest` | Malformed params — e.g. a non-boolean `enabled`/`auto`, or neither field present. |
+| `nightMode.notSupported` | The host does not implement night mode. |
+
 ## Usage — extension side
 
 ```js
@@ -177,6 +187,20 @@ if (client.hasCapability('charts')) {
   await client.subscribe(['chart.**'], async () => {
     render(await client.chart.list())
   })
+}
+
+// Night mode (capability `nightMode`) — match the host's night-vision display.
+if (client.hasCapability('nightMode')) {
+  const { enabled } = await client.nightMode.get()
+  applyTheme(enabled ? 'night' : 'day')
+  // Follow changes from any origin (an extension's set, the host's own toggle,
+  // or the server's environment.mode flipping while `auto` is on).
+  await client.subscribe(['nightMode.changed'], (_name, { enabled }) => {
+    applyTheme(enabled ? 'night' : 'day')
+  })
+  // Force on / force off / follow the server:
+  // await client.nightMode.set({ enabled: true })   // force on (auto -> false)
+  // await client.nightMode.set({ auto: true })       // follow environment.mode
 }
 ```
 
