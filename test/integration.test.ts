@@ -94,6 +94,55 @@ describe('handshake', () => {
   })
 })
 
+describe('embedding-host connection (reverse embedding)', () => {
+  // The plotter is the host but the child iframe; the embedder is the caller
+  // and initiates. The host does not know the caller in advance, so it adopts
+  // the id the caller asserts in bus.ready.
+  async function embedRig(
+    hostOpts: Partial<ConstructorParameters<typeof HostConnection>[0]> = {},
+    clientOpts: Parameters<typeof connectExtension>[0] = {}
+  ): Promise<Rig> {
+    const channel = new MessageChannel()
+    const host = new HostConnection({
+      port: messagePort(channel.port1),
+      hostInfo: HOST_INFO,
+      context: { kind: 'embedding-host', id: 'embedding-host', instanceId: null },
+      adoptCallerId: true,
+      onError: () => {},
+      ...hostOpts
+    })
+    const client = await connectExtension({
+      port: messagePort(channel.port2),
+      timeoutMs: 2000,
+      onError: () => {},
+      ...clientOpts
+    })
+    const r = { host, client }
+    rigs.push(r)
+    return r
+  }
+
+  it('adopts the caller-asserted id as context.id', async () => {
+    const { client } = await embedRig({}, { id: 'kip' })
+    expect(client.context.kind).toBe('embedding-host')
+    expect(client.context.id).toBe('kip')
+    expect(client.context.instanceId).toBe(null)
+  })
+
+  it('falls back to the host default id when the caller asserts none', async () => {
+    const { client } = await embedRig()
+    expect(client.context.id).toBe('embedding-host')
+  })
+
+  it('ignores a caller id when the host does not adopt it (default)', async () => {
+    const { client } = await embedRig(
+      { adoptCallerId: false, context: { kind: 'widget', id: 'gauge' } },
+      { id: 'kip' }
+    )
+    expect(client.context.id).toBe('gauge')
+  })
+})
+
 describe('event subscription and publish', () => {
   it('only delivers events the context subscribed to', async () => {
     const { host, client } = await rig()

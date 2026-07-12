@@ -4,6 +4,7 @@ import {
   EVENT_HANDSHAKE,
   EVENT_READY,
   HandshakeContext,
+  ReadyParams,
   RPC_ERRORS,
   RpcError
 } from './protocol'
@@ -29,6 +30,15 @@ export interface HostConnectionOptions {
    * current pattern list. Lets the host start/stop upstream work lazily.
    */
   onSubscriptionsChanged?: (patterns: string[]) => void
+  /**
+   * When true, adopt a caller-asserted `id` from the `bus.ready` payload as
+   * `context.id` in the handshake. Used for embedding-host connections, where
+   * the host does not know the caller in advance. Defaults to false: the
+   * host-provided `context.id` is authoritative and the ready payload is
+   * ignored (the standard extension case, where the host created the iframe
+   * and already knows the contribution).
+   */
+  adoptCallerId?: boolean
 }
 
 /**
@@ -44,12 +54,14 @@ export class HostConnection {
   private readonly hostInfo: HostInfo
   private readonly subs = new Map<string, string[]>()
   private readonly onSubscriptionsChanged?: (patterns: string[]) => void
+  private readonly adoptCallerId: boolean
   private subSeq = 0
 
   constructor(opts: HostConnectionOptions) {
     this.hostInfo = opts.hostInfo
     this.context = opts.context
     this.onSubscriptionsChanged = opts.onSubscriptionsChanged
+    this.adoptCallerId = opts.adoptCallerId ?? false
     this.endpoint = new BusEndpoint({
       port: opts.port,
       callTimeoutMs: opts.callTimeoutMs,
@@ -64,7 +76,9 @@ export class HostConnection {
     this.endpoint.registerMethod('events.unsubscribe', (params) =>
       this.handleUnsubscribe(params)
     )
-    this.endpoint.onEvent([EVENT_READY], () => this.sendHandshake())
+    this.endpoint.onEvent([EVENT_READY], (_name, params) =>
+      this.sendHandshake(params as ReadyParams | undefined)
+    )
   }
 
   registerMethod(name: string, handler: MethodHandler): void {
@@ -102,10 +116,14 @@ export class HostConnection {
     this.subs.clear()
   }
 
-  private sendHandshake(): void {
+  private sendHandshake(ready?: ReadyParams): void {
+    const context =
+      this.adoptCallerId && ready?.id
+        ? { ...this.context, id: ready.id }
+        : this.context
     this.endpoint.notify(EVENT_HANDSHAKE, {
       ...this.hostInfo,
-      context: this.context
+      context
     })
   }
 

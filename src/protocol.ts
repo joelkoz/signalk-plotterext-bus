@@ -120,7 +120,21 @@ export class RpcError extends Error {
 export const EVENT_READY = 'bus.ready'
 export const EVENT_HANDSHAKE = 'bus.handshake'
 
-export type ContextKind = 'panel' | 'widget' | 'background'
+/**
+ * Optional payload a caller may send with `bus.ready`. Additive and
+ * backward-compatible: a host that predates it (or does not adopt caller ids)
+ * ignores it.
+ */
+export interface ReadyParams {
+  /**
+   * Caller-asserted context id. A host that adopts caller ids — an
+   * embedding-host connection, where the host does not know the caller in
+   * advance — uses it as `context.id`; otherwise it is ignored.
+   */
+  id?: string
+}
+
+export type ContextKind = 'panel' | 'widget' | 'background' | 'embedding-host'
 
 export interface HandshakeContext {
   kind: ContextKind
