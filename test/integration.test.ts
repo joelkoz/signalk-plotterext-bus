@@ -7,6 +7,8 @@ import {
   ChartOpacityEvent,
   ChartOrderEvent,
   ChartVisibilityEvent,
+  MapView,
+  MapViewEvent,
   NightModeChangedEvent,
   RPC_ERRORS,
   RpcError,
@@ -944,5 +946,143 @@ describe('nightMode helpers', () => {
     const res = await client.call('nightMode.set', { enabled: true })
     expect(res).toEqual({})
     expect(await client.call('nightMode.get')).toEqual({ enabled: true, auto: false })
+  })
+})
+
+describe('map helpers', () => {
+  // A tiny in-memory host mirroring the `map` capability: a viewport the
+  // extension can read and drive, and that the user can also move. Every
+  // settled change publishes one map.view carrying the whole view.
+  interface MapRig extends Rig {
+    userMoves: (center: [number, number], zoom?: number) => void
+  }
+
+  // Stand-in for a real projection: a span that halves with each zoom level.
+  const boundsFor = (
+    center: [number, number],
+    zoom: number
+  ): [number, number, number, number] => {
+    const span = 180 / 2 ** zoom
+    return [
+      center[0] - span,
+      center[1] - span / 2,
+      center[0] + span,
+      center[1] + span / 2
+    ]
+  }
+
+  async function mapRig(
+    initial: { center?: [number, number]; zoom?: number } = {}
+  ): Promise<MapRig> {
+    const view = {
+      center: initial.center ?? ([-80.19, 25.77] as [number, number]),
+      zoom: initial.zoom ?? 13
+    }
+    let host: HostConnection
+    const snapshot = (): MapView => ({
+      center: view.center,
+      zoom: view.zoom,
+      bounds: boundsFor(view.center, view.zoom)
+    })
+    // One event per settled change, whoever caused it.
+    const settle = (center: [number, number], zoom: number) => {
+      if (center[0] === view.center[0] && center[1] === view.center[1] && zoom === view.zoom) {
+        return
+      }
+      view.center = center
+      view.zoom = zoom
+      host.publish('map.view', snapshot())
+    }
+    const r = (await rig({
+      hostInfo: {
+        ...HOST_INFO,
+        capabilities: [...HOST_INFO.capabilities, 'map']
+      },
+      methods: {
+        'map.getView': () => snapshot(),
+        'map.center': (params) => {
+          const p = (params ?? {}) as { position: [number, number]; zoom?: number }
+          settle(p.position, typeof p.zoom === 'number' ? p.zoom : view.zoom)
+          return {}
+        },
+        'map.fitBounds': (params) => {
+          const { bounds } = (params ?? {}) as { bounds: number[] }
+          const [minLon, minLat, maxLon, maxLat] = bounds
+          // Frame the box: centre on it, zoom so its width fills the view.
+          settle(
+            [(minLon + maxLon) / 2, (minLat + maxLat) / 2],
+            Math.log2(360 / (maxLon - minLon))
+          )
+          return {}
+        }
+      }
+    })) as MapRig
+    host = r.host
+    r.userMoves = (center, zoom) => settle(center, zoom ?? view.zoom)
+    return r
+  }
+
+  it('advertises the map capability', async () => {
+    const { client } = await mapRig()
+    expect(client.hasCapability('map')).toBe(true)
+  })
+
+  it('getView returns the current { center, zoom, bounds }', async () => {
+    const { client } = await mapRig({ center: [-80, 25], zoom: 2 })
+    expect(await client.map.getView()).toEqual({
+      center: [-80, 25],
+      zoom: 2,
+      bounds: [-125, 2.5, -35, 47.5]
+    })
+  })
+
+  it('emits one map.view per settled change, carrying the same shape as getView', async () => {
+    const { client } = await mapRig()
+    const events: MapViewEvent[] = []
+    await client.subscribe(['map.view'], (_n, p) => events.push(p as MapViewEvent))
+    await client.map.center([-80, 25], 2)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(events).toHaveLength(1)
+    expect(events[0]).toEqual(await client.map.getView())
+  })
+
+  it('emits map.view origin-transparently when the user moves the map', async () => {
+    const { client, userMoves } = await mapRig()
+    const events: MapViewEvent[] = []
+    await client.subscribe(['map.view'], (_n, p) => events.push(p as MapViewEvent))
+    userMoves([-64.75, 32.3], 9)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(events.at(-1)?.center).toEqual([-64.75, 32.3])
+    expect(events.at(-1)?.zoom).toBe(9)
+  })
+
+  it('emits a single map.view when fitBounds changes centre and zoom together', async () => {
+    const { client } = await mapRig()
+    const events: MapViewEvent[] = []
+    await client.subscribe(['map.view'], (_n, p) => events.push(p as MapViewEvent))
+    await client.map.fitBounds([-90, 20, -70, 30])
+    await new Promise((r) => setTimeout(r, 20))
+    expect(events).toHaveLength(1)
+    expect(events[0].center).toEqual([-80, 25])
+    expect(events[0].zoom).toBeCloseTo(Math.log2(18))
+  })
+
+  it('does not emit map.view when a move leaves the view unchanged', async () => {
+    const { client } = await mapRig({ center: [-80, 25], zoom: 2 })
+    const events: MapViewEvent[] = []
+    await client.subscribe(['map.view'], (_n, p) => events.push(p as MapViewEvent))
+    await client.map.center([-80, 25], 2)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(events).toHaveLength(0)
+  })
+
+  it('exposes the map methods through the generic call() too (JS path)', async () => {
+    const { client } = await mapRig()
+    expect(await client.call('map.center', { position: [-80, 25], zoom: 2 })).toEqual({})
+    expect(await client.call('map.getView')).toEqual({
+      center: [-80, 25],
+      zoom: 2,
+      bounds: [-125, 2.5, -35, 47.5]
+    })
   })
 })

@@ -379,3 +379,35 @@ export type NightModeChangedEvent = NightModeState
 export type NightModeErrorReason =
   | 'nightMode.badRequest'
   | 'nightMode.notSupported'
+
+/**
+ * Types for the `map` capability — the chart viewport. An extension reads it
+ * with `map.getView`, drives it with `map.center` / `map.fitBounds`, and follows
+ * it with the `map.view` event. See the Plotter Extensions API spec, "Map view".
+ */
+
+/**
+ * The chart viewport — the `map.getView` result and the payload of the
+ * `map.view` event, which carry the same shape.
+ */
+export interface MapView {
+  /** Viewport centre as `[lon, lat]`. */
+  center: [number, number]
+  /** Current zoom level; may be fractional. */
+  zoom: number
+  /**
+   * Axis-aligned lon/lat box covering what is rendered, as
+   * `[minLon, minLat, maxLon, maxLat]`. On a host whose map can be rotated this
+   * is the box containing the rotated view — "at least this much is on screen".
+   */
+  bounds: [number, number, number, number]
+}
+
+/**
+ * Payload of a `map.view` host event — the chart viewport was panned and/or
+ * zoomed. Emitted once the view has **settled** (the gesture and any kinetic
+ * glide have come to rest), not continuously during the gesture, and
+ * **origin-transparently**: for the user dragging the chart, the host recentring
+ * on the vessel, or an extension's own `map.center` / `map.fitBounds`.
+ */
+export type MapViewEvent = MapView

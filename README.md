@@ -221,6 +221,15 @@ if (client.hasCapability('nightMode')) {
   // await client.nightMode.set({ enabled: true })   // force on (auto -> false)
   // await client.nightMode.set({ auto: true })       // follow environment.mode
 }
+
+// Chart viewport (capability `map`) — follow where the user is looking instead
+// of polling. `map.view` fires once the pan/zoom settles, from any origin.
+if (client.hasCapability('map')) {
+  await client.subscribe(['map.view'], (_name, view) => refresh(view))
+  refresh(await client.map.getView()) // seed; same shape as the event
+  // await client.map.center([-80.19, 25.77], 13)
+  // await client.map.fitBounds([-80.5, 25.5, -80.0, 26.0])
+}
 ```
 
 ## Usage — host side

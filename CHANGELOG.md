@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.11.0
+
+`map.view` event — follow the chart viewport instead of polling it. The `map`
+capability gains a change event so an extension whose work depends on what the
+user is looking at (search-in-view, area downloads, overlays) is told when the
+view moves. `BUS_ID` stays `plotterExt/1` (new event vocabulary only; the
+envelope is unchanged). Minor bump.
+
+- **New event `map.view`** (`MapViewEvent`) — `{ center, zoom, bounds }`, the same
+  shape `map.getView` returns. Emitted once per **settled** pan/zoom (after the
+  gesture and any kinetic glide), not per frame, and origin-transparently: the
+  user dragging the chart, the host recentring, or an extension's own
+  `map.center` / `map.fitBounds`.
+- **New type `MapView`** — the viewport shape, shared by `map.getView` and the
+  event.
+- **New typed wrapper `client.map`** — `getView()`, `center(position, zoom?)`,
+  `fitBounds(bounds)`. The `map.*` methods were previously reachable only through
+  the generic `client.call`.
+- Additive and backward-compatible: a host that predates this simply never emits
+  `map.view`, and an extension that must run on one can still poll `map.getView`.
+
 ## 0.10.0
 
 Reverse embedding — support a plotter running **inside** an iframe embedded by

@@ -6,6 +6,7 @@ import {
   EVENT_READY,
   Handshake,
   HandshakeContext,
+  MapView,
   NightModeState,
   ReadyParams,
   RouteData,
@@ -275,6 +276,35 @@ export class ExtensionClient {
     },
     set: async (state: Partial<NightModeState>): Promise<void> => {
       await this.call('nightMode.set', state)
+    }
+  }
+
+  /**
+   * The host's chart viewport (capability `map`). Read the current
+   * `{ center, zoom, bounds }`, drive it, and follow it by subscribing to the
+   * `map.view` event (`MapViewEvent`), which carries the same shape and fires
+   * once per settled pan/zoom. Seed with `getView` so a follower has a view
+   * before the first change. As with every wrapper, a plain-JS extension can
+   * call `client.call('map.getView' | 'map.center' | 'map.fitBounds', …)`
+   * directly with no behavioural difference.
+   */
+  readonly map = {
+    getView: async (): Promise<MapView> => {
+      return (await this.call('map.getView')) as MapView
+    },
+    center: async (
+      position: [number, number],
+      zoom?: number
+    ): Promise<void> => {
+      await this.call('map.center', {
+        position,
+        ...(typeof zoom === 'number' ? { zoom } : {})
+      })
+    },
+    fitBounds: async (
+      bounds: [number, number, number, number]
+    ): Promise<void> => {
+      await this.call('map.fitBounds', { bounds })
     }
   }
 

@@ -120,6 +120,15 @@ specification (proposed to `SignalK/signalk-server` under
   reject with a stable `error.data.reason` from `NightModeErrorReason`
   (`nightMode.badRequest`/`notSupported`). Authoritative method/event contract lives
   in the Plotter Extensions API spec ("Night mode").
+- `map.*` (capability `map`): typed wrappers over the host's chart viewport.
+  Surface: `map.getView()` → `MapView` (`{ center, zoom, bounds }`),
+  `map.center(position, zoom?)` and `map.fitBounds(bounds)`. Changes are followed
+  via the `map.view` event (`MapViewEvent`), which carries the same shape as
+  `getView`. It is emitted once the view has **settled** (the gesture and any
+  kinetic glide have come to rest) rather than per frame, and for every change
+  regardless of origin (the user dragging the chart, the host recentring, or an
+  extension's own `center`/`fitBounds`). Authoritative method/event contract lives
+  in the Plotter Extensions API spec ("Map view").
 - Default transport posts to `window.parent` with target origin `'*'`,
   filtering received messages by peer source. Rationale: the host page's
   origin may legitimately differ from the extension asset origin (e.g. a
