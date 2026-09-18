@@ -240,9 +240,9 @@ export class ExtensionClient {
    * order (all batch). It does not create, add, or delete chart sources. Follow
    * changes (from any origin, including the host's own chart controls) by
    * subscribing to `chart.**` events (`ChartVisibilityEvent` / `ChartOpacityEvent`
-   * / `ChartOrderEvent`) and re-reading `chart.list` where needed. As with every
-   * wrapper, a plain-JS extension can call `client.call('chart.list', …)`
-   * directly with no behavioural difference.
+   * / `ChartOrderEvent` / `ChartTimeEvent`) and re-reading `chart.list` where
+   * needed. As with every wrapper, a plain-JS extension can call
+   * `client.call('chart.list', …)` directly with no behavioural difference.
    */
   readonly chart = {
     list: async (): Promise<ChartLayer[]> => {
@@ -257,6 +257,14 @@ export class ExtensionClient {
     },
     setOrder: async (order: string[]): Promise<void> => {
       await this.call('chart.setOrder', { order })
+    },
+    /**
+     * Retarget time-varying charts to an ISO 8601 instant, or back to their
+     * live frame with `null` (sub-capability `charts.time`). Follow changes via
+     * the `chart.time` event (`ChartTimeEvent`).
+     */
+    setTime: async (ids: string[], time: string | null): Promise<void> => {
+      await this.call('chart.setTime', { ids, time })
     }
   }
 

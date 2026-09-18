@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.12.0
+
+`charts.time` — retarget a time-varying chart. The `charts` capability gains an
+optional sub-capability so an extension can scrub one weather-radar / satellite
+chart through its frames instead of a provider publishing one chart resource
+per frame and swapping visibility. `BUS_ID` stays `plotterExt/1` (new method and
+event vocabulary only; the envelope is unchanged). Minor bump.
+
+- **New sub-capability id `charts.time`** (requires `charts`).
+- **New method `chart.setTime`** (`ChartSetTimeParams`) — `{ ids, time }`, batch
+  like the other chart mutators; `time` is an ISO 8601 instant or `null` for the
+  live/current frame. The host passes the instant through — no snapping or
+  clamping.
+- **New type `ChartTime`** and optional `ChartLayer.time` — present only on a
+  time-addressable chart: `{ value, current, from?, to?, step?, values? }`.
+  The timeline fields are best-effort metadata, not the source of truth.
+- **New event `chart.time`** (`ChartTimeEvent`) — `{ id, time }`,
+  origin-transparent like the other chart events; one per changed chart.
+- **New error reason `charts.notTemporal`** on `ChartErrorReason`.
+- **New typed wrapper `client.chart.setTime(ids, time)`**.
+- Additive and backward-compatible: a host without `charts.time` never reports
+  `time` on a chart, never emits `chart.time`, and answers `chart.setTime` with
+  `charts.notSupported`.
+
 ## 0.11.0
 
 `map.view` event — follow the chart viewport instead of polling it. The `map`
