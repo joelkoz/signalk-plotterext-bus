@@ -6,6 +6,8 @@ import {
   ChartLayer,
   ChartOpacityEvent,
   ChartOrderEvent,
+  ChartTime,
+  ChartTimeEvent,
   ChartVisibilityEvent,
   MapView,
   MapViewEvent,
@@ -642,11 +644,12 @@ describe('chart helpers', () => {
     bounds?: [number, number, number, number]
     minZoom?: number
     maxZoom?: number
+    time?: ChartTime
   }
 
   async function chartRig(): Promise<Rig> {
     // Seeded top-to-bottom (index 0 = topmost).
-    const order: string[] = ['osm', 'noaa-12345', 's57-1']
+    const order: string[] = ['osm', 'noaa-12345', 's57-1', 'radar']
     const charts = new Map<string, ChartRec>([
       ['osm', { id: 'osm', name: 'OpenStreetMap', visible: true, opacity: 1, type: 'raster' }],
       [
@@ -662,7 +665,26 @@ describe('chart helpers', () => {
           maxZoom: 18
         }
       ],
-      ['s57-1', { id: 's57-1', name: 'ENC US5FL', visible: true, opacity: 0.8, type: 'S-57' }]
+      ['s57-1', { id: 's57-1', name: 'ENC US5FL', visible: true, opacity: 0.8, type: 'S-57' }],
+      // A time-varying chart: the host reports its time dimension and can
+      // retarget it (sub-capability `charts.time`).
+      [
+        'radar',
+        {
+          id: 'radar',
+          name: 'NOAA NEXRAD composite',
+          visible: true,
+          opacity: 0.65,
+          type: 'raster',
+          time: {
+            value: null,
+            current: true,
+            from: '2026-09-18T12:00:00Z',
+            to: '2026-09-18T15:00:00Z',
+            step: 300000
+          }
+        }
+      ]
     ])
     let host: HostConnection
     const snapshot = (id: string): ChartLayer => {
@@ -675,11 +697,17 @@ describe('chart helpers', () => {
         ...(c.type ? { type: c.type } : {}),
         ...(c.bounds ? { bounds: c.bounds } : {}),
         ...(c.minZoom !== undefined ? { minZoom: c.minZoom } : {}),
-        ...(c.maxZoom !== undefined ? { maxZoom: c.maxZoom } : {})
+        ...(c.maxZoom !== undefined ? { maxZoom: c.maxZoom } : {}),
+        ...(c.time ? { time: { ...c.time } } : {})
       }
     }
+    const ISO_INSTANT =
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/
     const r = await rig({
-      hostInfo: { ...HOST_INFO, capabilities: [...HOST_INFO.capabilities, 'charts'] },
+      hostInfo: {
+        ...HOST_INFO,
+        capabilities: [...HOST_INFO.capabilities, 'charts', 'charts.time']
+      },
       methods: {
         'chart.list': () => ({ charts: order.map(snapshot) }),
         'chart.setVisibility': (params) => {
@@ -733,6 +761,35 @@ describe('chart helpers', () => {
           order.splice(0, order.length, ...next, ...rest)
           host.publish('chart.order', { order: [...order] })
           return {}
+        },
+        'chart.setTime': (params) => {
+          const { ids, time } = (params ?? {}) as {
+            ids?: string[]
+            time?: string | null
+          }
+          if (
+            !Array.isArray(ids) ||
+            !(time === null || (typeof time === 'string' && ISO_INSTANT.test(time)))
+          ) {
+            throw new RpcError('ids[] and an ISO 8601 instant or null required', {
+              reason: 'charts.badRequest'
+            })
+          }
+          for (const id of ids) {
+            const c = charts.get(id)
+            if (!c) throw new RpcError('no such chart', { reason: 'charts.unknownId' })
+            if (!c.time) {
+              throw new RpcError('chart has no time dimension', {
+                reason: 'charts.notTemporal'
+              })
+            }
+            // Passed through as-is — the host neither snaps nor clamps.
+            if (c.time.value !== time) {
+              c.time.value = time
+              host.publish('chart.time', { id, time })
+            }
+          }
+          return {}
         }
       }
     })
@@ -748,7 +805,7 @@ describe('chart helpers', () => {
   it('lists chart layers in display order with metadata', async () => {
     const { client } = await chartRig()
     const list = await client.chart.list()
-    expect(list.map((c) => c.id)).toEqual(['osm', 'noaa-12345', 's57-1'])
+    expect(list.map((c) => c.id)).toEqual(['osm', 'noaa-12345', 's57-1', 'radar'])
     const noaa = list.find((c) => c.id === 'noaa-12345')!
     expect(noaa.visible).toBe(false)
     expect(noaa.type).toBe('raster')
@@ -798,9 +855,9 @@ describe('chart helpers', () => {
     await client.chart.setOrder(['s57-1'])
     await new Promise((r) => setTimeout(r, 20))
     expect(seen).toHaveLength(1)
-    expect(seen[0].order).toEqual(['s57-1', 'osm', 'noaa-12345'])
+    expect(seen[0].order).toEqual(['s57-1', 'osm', 'noaa-12345', 'radar'])
     const list = await client.chart.list()
-    expect(list.map((c) => c.id)).toEqual(['s57-1', 'osm', 'noaa-12345'])
+    expect(list.map((c) => c.id)).toEqual(['s57-1', 'osm', 'noaa-12345', 'radar'])
   })
 
   it('surfaces an unknown chart id as charts.unknownId', async () => {
@@ -818,6 +875,58 @@ describe('chart helpers', () => {
       visible: true
     })
     expect(res).toEqual({})
+  })
+
+  // ---- charts.time --------------------------------------------------------
+
+  it('advertises charts.time and reports a time dimension only on temporal charts', async () => {
+    const { client } = await chartRig()
+    expect(client.hasCapability('charts.time')).toBe(true)
+    const list = await client.chart.list()
+    const radar = list.find((c) => c.id === 'radar')!
+    expect(radar.time).toEqual({
+      value: null,
+      current: true,
+      from: '2026-09-18T12:00:00Z',
+      to: '2026-09-18T15:00:00Z',
+      step: 300000
+    })
+    expect(list.find((c) => c.id === 'osm')!.time).toBeUndefined()
+  })
+
+  it('retargets a chart to an instant, then back to live, emitting chart.time per change', async () => {
+    const { client } = await chartRig()
+    const seen: ChartTimeEvent[] = []
+    await client.subscribe(['chart.time'], (_name, params) =>
+      seen.push(params as ChartTimeEvent)
+    )
+    await client.chart.setTime(['radar'], '2026-09-18T13:35:00Z')
+    // Same instant again: no change, no event.
+    await client.chart.setTime(['radar'], '2026-09-18T13:35:00Z')
+    await client.chart.setTime(['radar'], null)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(seen).toEqual([
+      { id: 'radar', time: '2026-09-18T13:35:00Z' },
+      { id: 'radar', time: null }
+    ])
+    const radar = (await client.chart.list()).find((c) => c.id === 'radar')!
+    expect(radar.time!.value).toBeNull()
+  })
+
+  it('rejects a chart with no time dimension as charts.notTemporal', async () => {
+    const { client } = await chartRig()
+    const err: RpcError = await client.chart
+      .setTime(['osm'], '2026-09-18T13:35:00Z')
+      .catch((e) => e)
+    expect(err.reason).toBe('charts.notTemporal')
+  })
+
+  it('rejects a non-instant time as charts.badRequest', async () => {
+    const { client } = await chartRig()
+    const err: RpcError = await client.chart
+      .setTime(['radar'], 'yesterday')
+      .catch((e) => e)
+    expect(err.reason).toBe('charts.badRequest')
   })
 })
 

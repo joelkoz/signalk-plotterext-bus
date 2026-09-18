@@ -286,8 +286,10 @@ export type RouteErrorReason =
  * order. It does **not** add, create, or delete chart sources — only manages
  * charts the host already knows about. Follow changes (from any origin,
  * including the user's own chart controls) via the `chart.visibility` /
- * `chart.opacity` / `chart.order` events. See the Plotter Extensions API spec,
- * "Chart layers".
+ * `chart.opacity` / `chart.order` events. With the `charts.time` sub-capability
+ * a host also retargets time-varying charts (`chart.setTime`, `ChartTime`,
+ * `chart.time`). See the Plotter Extensions API spec, "Chart layers" and
+ * "Time-varying charts".
  */
 
 /**
@@ -311,6 +313,56 @@ export interface ChartLayer {
   minZoom?: number
   /** Maximum usable zoom level, when known. */
   maxZoom?: number
+  /**
+   * Present only on a time-addressable chart (hosts with `charts.time`): the
+   * instant currently shown and the source's timeline, as far as the host knows
+   * it. Absent on a chart with no time dimension.
+   */
+  time?: ChartTime
+}
+
+/**
+ * The time dimension of a time-varying chart (weather radar, satellite,
+ * nowcast) — the `time` object on a `chart.list` entry. `value` and `current`
+ * are always present; the timeline fields are best-effort metadata as the host
+ * last learned them (from the chart resource or the source's capabilities),
+ * not the contract's source of truth — a rolling product's newest frame moves
+ * on between reads.
+ */
+export interface ChartTime {
+  /** Instant currently shown (ISO 8601), or `null` for the live/current frame. */
+  value: string | null
+  /** Whether the source serves a live/current frame (so `null` is a valid target). */
+  current: boolean
+  /** Earliest instant offered (ISO 8601), when known. */
+  from?: string
+  /** Latest instant offered (ISO 8601), when known. */
+  to?: string
+  /** Milliseconds between frames, when the timeline is regular. */
+  step?: number
+  /** The explicit instants offered (ISO 8601), when the timeline is a list. */
+  values?: string[]
+}
+
+/**
+ * Params of `chart.setTime` — retarget each named time-varying chart to an
+ * instant (ISO 8601) or back to its live frame (`null`). The host passes the
+ * instant through to the source without snapping or clamping.
+ */
+export interface ChartSetTimeParams {
+  ids: string[]
+  time: string | null
+}
+
+/**
+ * Payload of a `chart.time` host event — a time-varying chart was retargeted
+ * (`time` is an ISO 8601 instant) or returned to live (`time: null`). Emitted
+ * for every change regardless of origin; a batch `chart.setTime` emits one
+ * event per changed chart.
+ */
+export interface ChartTimeEvent {
+  id: string
+  time: string | null
 }
 
 /**
@@ -344,6 +396,7 @@ export type ChartErrorReason =
   | 'charts.unknownId'
   | 'charts.badRequest'
   | 'charts.notSupported'
+  | 'charts.notTemporal'
 
 /**
  * Types for the `nightMode` capability — the host's night-vision display mode

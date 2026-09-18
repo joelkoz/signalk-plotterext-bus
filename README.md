@@ -149,6 +149,7 @@ from the package).
 | `charts.unknownId` | No managed chart has one of the supplied ids. |
 | `charts.badRequest` | Malformed params — e.g. a missing `ids` array, a non-boolean `visible`, or an out-of-range `opacity`. |
 | `charts.notSupported` | The host does not implement this chart operation. |
+| `charts.notTemporal` | `chart.setTime` named a managed chart that has no time dimension (sub-capability `charts.time`). |
 
 ### Night-mode error reasons
 
@@ -206,6 +207,13 @@ if (client.hasCapability('charts')) {
   await client.subscribe(['chart.**'], async () => {
     render(await client.chart.list())
   })
+}
+
+// Time-varying charts (sub-capability `charts.time`) — scrub a weather radar
+// or satellite chart through its frames; `null` returns it to live.
+if (client.hasCapability('charts.time')) {
+  const radar = (await client.chart.list()).find((c) => c.time)
+  if (radar) await client.chart.setTime([radar.id], '2026-09-18T13:35:00Z')
 }
 
 // Night mode (capability `nightMode`) — match the host's night-vision display.
