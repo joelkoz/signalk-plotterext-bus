@@ -161,6 +161,18 @@ A failing `nightMode.*` host method rejects with a JSON-RPC error whose
 | `nightMode.badRequest` | Malformed params — e.g. a non-boolean `enabled`/`auto`, or neither field present. |
 | `nightMode.notSupported` | The host does not implement night mode. |
 
+### Resource-group error reasons
+
+A failing `resourceGroup.*` host method rejects with a JSON-RPC error whose
+`error.data.reason` is one of the stable `ResourceGroupErrorReason` strings.
+
+| `reason` | Meaning |
+| --- | --- |
+| `resourceGroups.unknownId` | No group with that id (including when the server has no `groups` collection). |
+| `resourceGroups.fetchFailed` | The group could not be read for another reason. |
+| `resourceGroups.badRequest` | Malformed params — a missing or non-string `id` — or a group whose lists are not arrays of strings. |
+| `resourceGroups.notSupported` | The host does not implement resource groups. |
+
 ## Usage — extension side
 
 ```js
@@ -237,6 +249,16 @@ if (client.hasCapability('map')) {
   refresh(await client.map.getView()) // seed; same shape as the event
   // await client.map.center([-80.19, 25.77], 13)
   // await client.map.fitBounds([-80.5, 25.5, -80.0, 26.0])
+}
+
+// Resource groups (capability `resourceGroups`) — switch the chart to a stored
+// group. Create/edit/list groups through the server's resources API
+// (/resources/groups); the bus only applies one.
+if (client.hasCapability('resourceGroups')) {
+  const { applied } = await client.resourceGroup.apply(groupId)
+  // `applied` = the types the host acted on (best effort), e.g. ['routes', 'charts'].
+  // Follow applies from any origin, including the user's own group picker:
+  await client.subscribe(['resourceGroup.applied'], (_name, { id }) => highlight(id))
 }
 ```
 

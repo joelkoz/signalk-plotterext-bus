@@ -12,6 +12,9 @@ import {
   MapView,
   MapViewEvent,
   NightModeChangedEvent,
+  ResourceGroup,
+  ResourceGroupAppliedEvent,
+  ResourceGroupType,
   RPC_ERRORS,
   RpcError,
   RouteDirtyEvent,
@@ -1193,5 +1196,122 @@ describe('map helpers', () => {
       zoom: 2,
       bounds: [-125, 2.5, -35, 47.5]
     })
+  })
+})
+
+describe('resourceGroup helpers', () => {
+  // A tiny in-memory host mirroring the `resourceGroups` capability. It keeps a
+  // per-id display selection for routes, waypoints and charts, and does NOT
+  // display regions at all — so it exercises the best-effort rule: a type the
+  // host cannot act on is omitted from `applied`. Every apply (extension or the
+  // host's own UI) publishes resourceGroup.applied.
+  interface GroupRig extends Rig {
+    shown: Record<'routes' | 'waypoints' | 'charts', string[]>
+    userApply: (id: string) => void
+  }
+
+  const HOST_TYPES = ['routes', 'waypoints', 'charts'] as const
+
+  async function groupRig(
+    groups: Record<string, ResourceGroup>,
+    shown: GroupRig['shown'] = { routes: ['r0'], waypoints: ['w0'], charts: ['c0'] }
+  ): Promise<GroupRig> {
+    let host: HostConnection
+    const apply = (id: unknown) => {
+      if (typeof id !== 'string' || !id) {
+        throw new RpcError('id required', { reason: 'resourceGroups.badRequest' })
+      }
+      const group = groups[id]
+      if (!group) {
+        throw new RpcError(`no group ${id}`, { reason: 'resourceGroups.unknownId' })
+      }
+      const applied: ResourceGroupType[] = []
+      for (const type of HOST_TYPES) {
+        const ids = group[type]
+        if (!Array.isArray(ids)) continue // absent: leave this type alone
+        shown[type] = [...ids]
+        applied.push(type)
+      }
+      host.publish('resourceGroup.applied', { id, applied })
+      return { applied }
+    }
+    const r = (await rig({
+      hostInfo: {
+        ...HOST_INFO,
+        capabilities: [...HOST_INFO.capabilities, 'resourceGroups']
+      },
+      methods: {
+        'resourceGroup.apply': (params) =>
+          apply((params as { id?: unknown } | undefined)?.id)
+      }
+    })) as GroupRig
+    host = r.host
+    r.shown = shown
+    r.userApply = (id) => void apply(id)
+    return r
+  }
+
+  it('advertises the resourceGroups capability', async () => {
+    const { client } = await groupRig({})
+    expect(client.hasCapability('resourceGroups')).toBe(true)
+  })
+
+  it('[ids] replaces the selection, [] clears it, an absent key leaves it', async () => {
+    const { client, shown } = await groupRig({
+      g1: { name: 'Crossing', routes: ['r1', 'r2'], charts: [] }
+    })
+    const res = await client.resourceGroup.apply('g1')
+    expect(shown.routes).toEqual(['r1', 'r2'])
+    expect(shown.charts).toEqual([])
+    expect(shown.waypoints).toEqual(['w0']) // absent key: untouched
+    expect(res.applied).toEqual(['routes', 'charts'])
+  })
+
+  it('omits a type the host does not act on (best effort)', async () => {
+    const { client } = await groupRig({
+      g1: { name: 'Zones', regions: ['z1'], waypoints: ['w1'] }
+    })
+    const res = await client.resourceGroup.apply('g1')
+    // This host does not display regions, so it reports only waypoints.
+    expect(res.applied).toEqual(['waypoints'])
+  })
+
+  it('emits resourceGroup.applied for an extension apply and a host-UI apply', async () => {
+    const { client, userApply } = await groupRig({
+      g1: { name: 'A', routes: ['r1'] },
+      g2: { name: 'B', waypoints: [] }
+    })
+    const events: ResourceGroupAppliedEvent[] = []
+    await client.subscribe(['resourceGroup.applied'], (_n, p) =>
+      events.push(p as ResourceGroupAppliedEvent)
+    )
+    await client.resourceGroup.apply('g1')
+    userApply('g2') // origin-transparent: the user's own group picker
+    await new Promise((r) => setTimeout(r, 20))
+    expect(events).toEqual([
+      { id: 'g1', applied: ['routes'] },
+      { id: 'g2', applied: ['waypoints'] }
+    ])
+  })
+
+  it('rejects an unknown group with resourceGroups.unknownId', async () => {
+    const { client } = await groupRig({})
+    const err = await client.resourceGroup.apply('nope').catch((e: RpcError) => e)
+    expect(err).toBeInstanceOf(RpcError)
+    expect((err as RpcError).reason).toBe('resourceGroups.unknownId')
+  })
+
+  it('rejects a missing id with resourceGroups.badRequest', async () => {
+    const { client } = await groupRig({})
+    const err = await client.call('resourceGroup.apply', {}).catch((e: RpcError) => e)
+    expect(err).toBeInstanceOf(RpcError)
+    expect((err as RpcError).reason).toBe('resourceGroups.badRequest')
+  })
+
+  it('exposes resourceGroup.apply through the generic call() too (JS path)', async () => {
+    const { client, shown } = await groupRig({ g1: { name: 'A', charts: ['c9'] } })
+    const res = await client.call('resourceGroup.apply', { id: 'g1' })
+    expect(res).toEqual({ applied: ['charts'] })
+    expect(shown.charts).toEqual(['c9'])
   })
 })

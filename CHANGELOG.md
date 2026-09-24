@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.13.0
+
+`resourceGroups` capability — apply a stored resource group (a named set of
+routes, waypoints, regions and charts in the server's `groups` collection) to
+the host's display. `BUS_ID` stays `plotterExt/1` (new method and event
+vocabulary only; the envelope is unchanged). Minor bump.
+
+- **New capability id `resourceGroups`.**
+- **New method `resourceGroup.apply`** (`ResourceGroupApplyParams`, `{ id }`) →
+  `ResourceGroupApplyResult` (`{ applied }`): the types the host made a
+  best-effort attempt to carry out. A type the host does not act on, or whose key
+  is absent from the group, is omitted. It reports what was attempted, not the
+  resulting display.
+- **New type `ResourceGroup`** — the group document. Each of `routes`,
+  `waypoints`, `regions`, `charts` is optional with three distinct meanings:
+  `[ids]` display these, `[]` display none, key absent leave that type alone.
+- **New event `resourceGroup.applied`** (`ResourceGroupAppliedEvent`,
+  `{ id, applied }`) — origin-transparent: an extension's apply or the user's own
+  group picker. There is no "current group" query.
+- **New error reasons** `ResourceGroupErrorReason`: `resourceGroups.unknownId`,
+  `resourceGroups.fetchFailed`, `resourceGroups.badRequest`,
+  `resourceGroups.notSupported`.
+- **New typed wrapper `client.resourceGroup.apply(id)`.** Group create / edit /
+  delete / list stay on the server's resources API — not wrapped by the bus.
+
 ## 0.12.0
 
 `charts.time` — retarget a time-varying chart. The `charts` capability gains an

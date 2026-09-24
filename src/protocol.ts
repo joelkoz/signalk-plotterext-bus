@@ -464,3 +464,65 @@ export interface MapView {
  * on the vessel, or an extension's own `map.center` / `map.fitBounds`.
  */
 export type MapViewEvent = MapView
+
+/**
+ * Types for the `resourceGroups` capability — applying a stored resource group
+ * to the host's display. Groups are ordinary Signal K resources in the `groups`
+ * collection; an extension creates, edits and lists them through the server's
+ * resources API. The capability adds only what the host alone can do: apply one.
+ * See the Plotter Extensions API spec, "Resource groups".
+ */
+
+/** The resource types a group can carry an instruction for. */
+export type ResourceGroupType = 'routes' | 'waypoints' | 'regions' | 'charts'
+
+/**
+ * A resource group document, as stored at `/resources/groups/{id}`. Each list
+ * is an instruction for its type, with three distinct meanings:
+ * - `["a", …]` — display these (ids that resolve to no resource are ignored);
+ * - `[]` — display none of this type;
+ * - key absent — leave this type's display as it is.
+ * `[]` and an absent key are **not** interchangeable.
+ */
+export interface ResourceGroup {
+  name: string
+  description?: string
+  routes?: string[]
+  waypoints?: string[]
+  regions?: string[]
+  charts?: string[]
+}
+
+/** Params of `resourceGroup.apply`. */
+export interface ResourceGroupApplyParams {
+  /** Id of the group in the server's `groups` collection. */
+  id: string
+}
+
+/**
+ * Result of `resourceGroup.apply`. `applied` lists every type for which the
+ * host made a best-effort attempt to carry out the group's instruction. A type
+ * the host did not act on — or whose key is absent from the group — is omitted.
+ * It reports what the host **attempted**, not the resulting display.
+ */
+export interface ResourceGroupApplyResult {
+  applied: ResourceGroupType[]
+}
+
+/**
+ * Payload of a `resourceGroup.applied` host event — a group was applied.
+ * Emitted **origin-transparently**: for an extension's `resourceGroup.apply`
+ * and for the user choosing a group in the host's own UI. It reports an action,
+ * not a readable state — there is no "current group" query.
+ */
+export interface ResourceGroupAppliedEvent extends ResourceGroupApplyResult {
+  /** Id of the group that was applied. */
+  id: string
+}
+
+/** Stable `error.data.reason` strings for `resourceGroup.*` host-method failures. */
+export type ResourceGroupErrorReason =
+  | 'resourceGroups.unknownId'
+  | 'resourceGroups.fetchFailed'
+  | 'resourceGroups.badRequest'
+  | 'resourceGroups.notSupported'
