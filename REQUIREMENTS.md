@@ -129,6 +129,20 @@ specification (proposed to `SignalK/signalk-server` under
   regardless of origin (the user dragging the chart, the host recentring, or an
   extension's own `center`/`fitBounds`). Authoritative method/event contract lives
   in the Plotter Extensions API spec ("Map view").
+- `resourceGroup.*` (capability `resourceGroups`): typed wrapper for applying a
+  stored resource group (`/resources/groups/{id}`) to the host's display.
+  Surface: `resourceGroup.apply(id)` → `ResourceGroupApplyResult`
+  (`{ applied }`). Group CRUD is deliberately **not** wrapped — it is the server's
+  resources API. `ResourceGroup` types the document; each list has three meanings
+  (`[ids]` display these, `[]` display none, key absent leave alone). `applied`
+  lists the types the host made a best-effort attempt at, not the resulting
+  display. Applies are followed via the `resourceGroup.applied` event
+  (`ResourceGroupAppliedEvent`, `{ id, applied }`), emitted for every apply
+  regardless of origin (an extension's call or the user's own group picker).
+  Failures reject with a stable `error.data.reason` from `ResourceGroupErrorReason`
+  (`resourceGroups.unknownId`/`fetchFailed`/`badRequest`/`notSupported`).
+  Authoritative method/event contract lives in the Plotter Extensions API spec
+  ("Resource groups").
 - Default transport posts to `window.parent` with target origin `'*'`,
   filtering received messages by peer source. Rationale: the host page's
   origin may legitimately differ from the extension asset origin (e.g. a
@@ -197,3 +211,8 @@ Must stay covered (vitest, Node, no DOM):
   even while `auto`+server say night), follow-server derives `enabled` from
   `environment.mode` and re-emits `nightMode.changed` on a server-mode flip,
   `nightMode.badRequest` on an empty set, generic `call()` path.
+- `resourceGroup.*` helper conformance: `resourceGroups` capability advertised,
+  `[ids]` replaces / `[]` clears / absent key leaves a type's display, a type the
+  host does not act on is omitted from `applied`, `resourceGroup.applied` emitted
+  for both an extension apply and a host-UI apply, `resourceGroups.unknownId` and
+  `resourceGroups.badRequest` reason propagation, generic `call()` path.

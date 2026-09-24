@@ -9,6 +9,7 @@ import {
   MapView,
   NightModeState,
   ReadyParams,
+  ResourceGroupApplyResult,
   RouteData,
   RoutePoint,
   RouteSummary,
@@ -284,6 +285,24 @@ export class ExtensionClient {
     },
     set: async (state: Partial<NightModeState>): Promise<void> => {
       await this.call('nightMode.set', state)
+    }
+  }
+
+  /**
+   * Apply a stored resource group to the host's display (capability
+   * `resourceGroups`). Resolves to `{ applied }` — the types the host made a
+   * best-effort attempt to carry out; a type it did not act on is omitted.
+   * Follow applies from any origin (including the user's own group picker) via
+   * the `resourceGroup.applied` event (`ResourceGroupAppliedEvent`). Group CRUD
+   * is not here: use the server's resources API (`/resources/groups`). A
+   * plain-JS extension can call `client.call('resourceGroup.apply', { id })`
+   * directly with no behavioural difference.
+   */
+  readonly resourceGroup = {
+    apply: async (id: string): Promise<ResourceGroupApplyResult> => {
+      return (await this.call('resourceGroup.apply', {
+        id
+      })) as ResourceGroupApplyResult
     }
   }
 
