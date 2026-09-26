@@ -251,6 +251,13 @@ if (client.hasCapability('map')) {
   // await client.map.fitBounds([-80.5, 25.5, -80.0, 26.0])
 }
 
+// Boxes are [west, south, east, north] with longitudes in [-180, 180]; a view
+// around 180° has west > east, so don't take `east - west` as its width.
+import { boundsLonSpan, boundsContainsLon, normalizeBounds } from 'signalk-plotterext-bus/extension'
+// boundsLonSpan([175, -21, -175, -13])          // 10
+// boundsContainsLon([175, -21, -175, -13], 179) // true
+// normalizeBounds([175, -21, 185, -13])          // [175, -21, -175, -13] — from a map library's unwrapped box
+
 // Resource groups (capability `resourceGroups`) — switch the chart to a stored
 // group. Create/edit/list groups through the server's resources API
 // (/resources/groups); the bus only applies one.

@@ -328,6 +328,11 @@ export class ExtensionClient {
         ...(typeof zoom === 'number' ? { zoom } : {})
       })
     },
+    /**
+     * Fit the chart to `[west, south, east, north]`. A box crossing the
+     * antimeridian may be given as `west > east` (the API's form) or unwrapped
+     * (`east` past 180); the host fits it the short way round.
+     */
     fitBounds: async (
       bounds: [number, number, number, number]
     ): Promise<void> => {
@@ -400,6 +405,7 @@ export function connectExtension(
 
 export * from './protocol'
 export * from './wildcard'
+export * from './bounds'
 export { BusEndpoint } from './endpoint'
 export type { MethodHandler, MethodContext, EventHandler } from './endpoint'
 export * from './port'

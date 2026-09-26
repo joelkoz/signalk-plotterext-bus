@@ -161,6 +161,7 @@ export class HostConnection {
 
 export * from './protocol'
 export * from './wildcard'
+export * from './bounds'
 export { BusEndpoint } from './endpoint'
 export type { MethodHandler, MethodContext, EventHandler } from './endpoint'
 export * from './port'

@@ -307,7 +307,11 @@ export interface ChartLayer {
   opacity: number
   /** Best-effort source kind, e.g. 'raster' | 'vector' | 'S-57' | 'WMS'. */
   type?: string
-  /** Geographic extent `[minLon, minLat, maxLon, maxLat]`, when known. */
+  /**
+   * Geographic extent `[west, south, east, north]`, when known. Longitudes are
+   * in `[-180, 180]`; a chart that crosses the antimeridian has `west > east`.
+   * See `LonLatBounds`.
+   */
   bounds?: [number, number, number, number]
   /** Minimum usable zoom level, when known. */
   minZoom?: number
@@ -450,8 +454,12 @@ export interface MapView {
   zoom: number
   /**
    * Axis-aligned lon/lat box covering what is rendered, as
-   * `[minLon, minLat, maxLon, maxLat]`. On a host whose map can be rotated this
-   * is the box containing the rotated view — "at least this much is on screen".
+   * `[west, south, east, north]`. On a host whose map can be rotated this is the
+   * box containing the rotated view — "at least this much is on screen".
+   * Longitudes are always in `[-180, 180]`, even when the chart has been panned
+   * into another copy of the world; a view straddling the antimeridian has
+   * `west > east`, and one showing every longitude is `-180` to `180`. See
+   * `LonLatBounds`.
    */
   bounds: [number, number, number, number]
 }

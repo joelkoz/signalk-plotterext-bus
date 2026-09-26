@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.14.0
+
+Bounding boxes and the antimeridian. Every lon/lat box in the API — `MapView`
+`bounds` (`map.getView` / `map.view`), `map.fitBounds`, and `ChartInfo.bounds` —
+is `[west, south, east, north]` with longitudes in `[-180, 180]`; a box that
+crosses the antimeridian has `west > east` (RFC 7946 §5.2), the Signal K Track
+API's convention. `map.fitBounds` also accepts the unwrapped form map engines use
+(`east` past 180). No wire change: `BUS_ID` stays `plotterExt/1` and the tuple
+type is unchanged; this pins down what its numbers mean. Minor bump for the new
+exports.
+
+- **New helpers** (from the root, `/host` and `/extension` entry points):
+  - `normalizeBounds(bounds)` — a box in the API's form from either form;
+    wraps longitudes into range, turns a 360°+ box into `-180`..`180`, and
+    returns `undefined` for anything that is not a box. For a host building
+    `map.view` from its map engine's extent, and for an extension handling a
+    `map.fitBounds`-style box of its own.
+  - `boundsLonSpan(bounds)` — width in degrees, the short way round a crossing.
+  - `boundsContainsLon(bounds, lon)` — whether a box takes in a longitude.
+- **New type `LonLatBounds`** — `[west, south, east, north]`.
+- **Doc comments** on `MapView.bounds`, `ChartInfo.bounds` and
+  `client.map.fitBounds` state the convention.
+
 ## 0.13.0
 
 `resourceGroups` capability — apply a stored resource group (a named set of
