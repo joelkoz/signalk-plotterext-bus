@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.15.0
+
+Waypoint links on route points. `RoutePoint` gains an optional `href` — a link
+to a saved waypoint as a Signal K resource path (`/resources/waypoints/<id>`),
+the same reference a Signal K route stores in its per-point metadata. It
+round-trips through `route.create`, `route.get`, `route.replace` and
+`route.save`, so editing a route no longer has to lose the links its points had
+on the server. `BUS_ID` stays `plotterExt/1`: the field is optional and additive.
+
+- A link is a reference, not a copy: `position` alone defines the geometry, and
+  the host does not keep the point and the waypoint in step — a client that
+  moves a linked point off its waypoint should drop the `href`.
+- A host built before this field drops it when copying points; nothing on the
+  wire tells the two apart, so an extension that depends on links should
+  `route.get` after writing and check.
+- Spec: Plotter Extensions API, "Live routes" → "Waypoint links".
+
 ## 0.14.0
 
 Bounding boxes and the antimeridian. Every lon/lat box in the API — `MapView`
