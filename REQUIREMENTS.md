@@ -86,7 +86,9 @@ specification (proposed to `SignalK/signalk-server` under
   methods. Surface: `route.list()`, `route.create({ points (≥2),
   name?, description? })`, `route.show(ref)`, `route.get(routeId)`,
   `route.replace(routeId, points)`, `route.save(routeId, { name?, description?,
-  dialog? })`, `route.hide(routeId)`, `route.delete(routeId)`. A route carries
+  dialog? })`, `route.hide(routeId)`, `route.delete(routeId)`. A point is
+  `RoutePoint` `{ position, name?, description?, href? }`, where `href` links it
+  to a saved waypoint (`/resources/waypoints/<id>`). A route carries
   `saved` (backed by a stored resource) and `dirty` (pending unsaved changes)
   flags; mutations are followed via `route.**` events
   (`route.visible`/`route.dirty`/`route.saved`/`route.hidden`, with `route.dirty`
