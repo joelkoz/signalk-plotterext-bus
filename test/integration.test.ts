@@ -469,6 +469,29 @@ describe('route helpers', () => {
     expect(visible?.params.dirty).toBe(true)
   })
 
+  it('carries a point href (waypoint link) through route.create, route.get and route.replace', async () => {
+    const { client } = await routeRig()
+    const href = '/resources/waypoints/0b3d4a2e-1f6c-4c8e-9a51-7d2e8f4b6a10'
+    const { routeId } = await client.route.create({
+      points: [
+        { position: [-80.1, 25.7], href },
+        { position: [-80.2, 25.8], name: 'Mark', href }
+      ]
+    })
+    const created = await client.route.get(routeId)
+    expect(created.points[0]).toEqual({ position: [-80.1, 25.7], href })
+    expect(created.points[1]).toEqual({ position: [-80.2, 25.8], name: 'Mark', href })
+
+    // Moving a linked point off its waypoint drops the link.
+    await client.route.replace(routeId, [
+      { position: [-80.15, 25.75] },
+      created.points[1]
+    ])
+    const replaced = await client.route.get(routeId)
+    expect(replaced.points[0].href).toBeUndefined()
+    expect(replaced.points[1].href).toBe(href)
+  })
+
   it('route.show brings a stored route into the visible set (saved:true, dirty:false)', async () => {
     const { client } = await routeRig()
     const visible: Array<Record<string, unknown>> = []

@@ -188,6 +188,15 @@ export interface RoutePoint {
   position: [number, number, number?]
   name?: string
   description?: string
+  /**
+   * Link to a saved waypoint, as a Signal K resource path
+   * (`/resources/waypoints/<id>`). A reference, not a copy: `position` alone
+   * defines the route's geometry, and the host does not keep the point and the
+   * waypoint in step — drop the link when moving the point off its waypoint. A
+   * host built before this field existed drops it. See the Plotter Extensions
+   * API spec, "Waypoint links".
+   */
+  href?: string
 }
 
 /** Snapshot of a route — result of `route.get`. */
