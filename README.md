@@ -90,7 +90,9 @@ patterns use eventemitter2-style wildcards: `*` matches exactly one segment,
 }
 ```
 
-`context.kind` is `panel`, `widget`, `background` or `embedding-host`.
+`context.kind` is `panel`, `widget`, `window`, `background` or `embedding-host`.
+A `window` context (capability `windows`) also carries `windowId` and the
+`params` the window was opened with.
 
 ### Embedding hosts (reverse embedding)
 
@@ -160,6 +162,21 @@ A failing `nightMode.*` host method rejects with a JSON-RPC error whose
 | --- | --- |
 | `nightMode.badRequest` | Malformed params — e.g. a non-boolean `enabled`/`auto`, or neither field present. |
 | `nightMode.notSupported` | The host does not implement night mode. |
+
+### Window error reasons
+
+A failing window method (`ui.openWindow`, `ui.updateWindow`, `ui.focusWindow`,
+`ui.closeWindow`, `ui.listWindows`) rejects with a JSON-RPC error whose
+`error.data.reason` is one of the stable `WindowErrorReason` strings.
+
+| `reason` | Meaning |
+| --- | --- |
+| `windows.badRequest` | Malformed params — e.g. a bad `geometry` or `anchor`, or a modal window asked to hide. |
+| `UNKNOWN_PANEL` | No iframe panel with that id in the caller's manifest (as for `ui.openPanel`). |
+| `windows.unknownId` | No open window with that id belongs to the caller's extension. |
+| `windows.limit` | The host will not open more windows. |
+| `windows.modalOpen` | Another modal window is already open. |
+| `windows.notSupported` | The host does not implement windows. |
 
 ### Resource-group error reasons
 
@@ -240,6 +257,24 @@ if (client.hasCapability('nightMode')) {
   // Force on / force off / follow the server:
   // await client.nightMode.set({ enabled: true })   // force on (auto -> false)
   // await client.nightMode.set({ auto: true })       // follow environment.mode
+}
+
+// Floating windows (capability `windows`) — show one of this extension's
+// iframe panels over the chart. Geometry is a request; the returned state has
+// the actual bounds. The window's page reads `client.context.params`.
+if (client.hasCapability('windows')) {
+  const w = await client.windows.open({
+    panel: 'viewer',
+    params: { app: '/signalk-wifish/' },
+    geometry: { anchor: 'bottom-right', offset: { x: 16, y: 16 }, width: 480, height: 240 },
+    userClose: 'hide', // the close control hides it; it keeps running
+    restoreKey: 'sounder' // reopen where the user left it
+  })
+  await client.subscribe(['window.closed'], (_name, { windowId, reason }) => {
+    if (windowId === w.windowId && reason === 'user') forget(windowId)
+  })
+  // await client.windows.update({ windowId: w.windowId, visible: true })
+  // await client.windows.list(); client.windows.focus(id); client.windows.close(id)
 }
 
 // Chart viewport (capability `map`) — follow where the user is looking instead

@@ -16,7 +16,11 @@ import {
   RPC_ERRORS,
   RpcError,
   SignalKValueEvent,
-  StateScope
+  StateScope,
+  WindowListResult,
+  WindowOpenParams,
+  WindowState,
+  WindowUpdateParams
 } from './protocol'
 
 export interface ConnectOptions {
@@ -285,6 +289,36 @@ export class ExtensionClient {
     },
     set: async (state: Partial<NightModeState>): Promise<void> => {
       await this.call('nightMode.set', state)
+    }
+  }
+
+  /**
+   * Floating windows (capability `windows`): show one of this extension's
+   * iframe panels in a window over the chart. Geometry is a request — read the
+   * actual `bounds` from the returned `WindowState`, and follow changes with
+   * the `window.bounds` / `window.state` / `window.closed` events. Windows
+   * belong to the extension, so any of its contexts may manage them; in a
+   * `window` context, `update` / `focus` / `close` default to the window
+   * itself when `windowId` is left out. A plain-JS extension can call
+   * `client.call('ui.openWindow', …)` and friends directly with no
+   * behavioural difference.
+   */
+  readonly windows = {
+    open: async (params: WindowOpenParams): Promise<WindowState> => {
+      return (await this.call('ui.openWindow', params)) as WindowState
+    },
+    update: async (params: WindowUpdateParams): Promise<WindowState> => {
+      return (await this.call('ui.updateWindow', params)) as WindowState
+    },
+    focus: async (windowId?: string): Promise<void> => {
+      await this.call('ui.focusWindow', windowId === undefined ? {} : { windowId })
+    },
+    close: async (windowId?: string): Promise<void> => {
+      await this.call('ui.closeWindow', windowId === undefined ? {} : { windowId })
+    },
+    list: async (): Promise<WindowState[]> => {
+      const r = (await this.call('ui.listWindows')) as WindowListResult
+      return r.windows
     }
   }
 

@@ -19,7 +19,9 @@ import {
   RpcError,
   RouteDirtyEvent,
   RoutePoint,
-  SignalKValueEvent
+  SignalKValueEvent,
+  WindowClosedEvent,
+  WindowState
 } from '../src/protocol'
 
 const HOST_INFO = {
@@ -1336,5 +1338,161 @@ describe('resourceGroup helpers', () => {
     const res = await client.call('resourceGroup.apply', { id: 'g1' })
     expect(res).toEqual({ applied: ['charts'] })
     expect(shown.charts).toEqual(['c9'])
+  })
+})
+
+describe('windows helpers', () => {
+  // A tiny in-memory host mirroring the `windows` capability: it records every
+  // call so the tests can check what the wrappers put on the wire, and keeps a
+  // list of open windows. The host clamps; here it simply echoes pixel sizes.
+  const AREA = { width: 1000, height: 800 }
+  function windowState(id: string, panel: string, over: Partial<WindowState> = {}): WindowState {
+    return {
+      windowId: id,
+      panel,
+      title: panel,
+      presentation: 'floating',
+      bounds: { x: 0, y: 0, width: 300, height: 200 },
+      area: AREA,
+      visible: true,
+      collapsed: false,
+      poppedOut: false,
+      modal: false,
+      ...over
+    }
+  }
+
+  async function windowsRig(self?: string) {
+    const calls: { method: string; params: unknown }[] = []
+    const open = new Map<string, WindowState>()
+    let seq = 0
+    const record = (method: string, params: unknown) => calls.push({ method, params })
+    const target = (p: { windowId?: string }) => {
+      const id = p.windowId ?? self
+      const w = id ? open.get(id) : undefined
+      if (!w) throw new RpcError('No such window', { reason: 'windows.unknownId' })
+      return w
+    }
+    const r = await rig({
+      hostInfo: { ...HOST_INFO, capabilities: [...HOST_INFO.capabilities, 'windows'] },
+      context: self
+        ? { kind: 'window', id: 'viewer', instanceId: null, windowId: self, params: { app: '/x/' } }
+        : { kind: 'background', id: 'runtime', instanceId: null },
+      methods: {
+        'ui.openWindow': (params) => {
+          record('ui.openWindow', params)
+          const p = params as { panel?: string; title?: string; geometry?: { width?: number; height?: number }; visible?: boolean }
+          if (p.panel !== 'viewer') {
+            throw new RpcError(`No such panel: ${p.panel}`, { reason: 'UNKNOWN_PANEL' })
+          }
+          const w = windowState(`w-${++seq}`, p.panel, {
+            title: p.title ?? 'viewer',
+            visible: p.visible ?? true,
+            bounds: { x: 0, y: 0, width: p.geometry?.width ?? 300, height: p.geometry?.height ?? 200 }
+          })
+          open.set(w.windowId, w)
+          return w
+        },
+        'ui.updateWindow': (params) => {
+          record('ui.updateWindow', params)
+          const p = params as { windowId?: string; title?: string; visible?: boolean }
+          const w = target(p)
+          if (p.title !== undefined) w.title = p.title
+          if (p.visible !== undefined) w.visible = p.visible
+          return w
+        },
+        'ui.focusWindow': (params) => {
+          record('ui.focusWindow', params)
+          target(params as { windowId?: string })
+          return {}
+        },
+        'ui.closeWindow': (params) => {
+          record('ui.closeWindow', params)
+          const w = target(params as { windowId?: string })
+          open.delete(w.windowId)
+          r.host.publish('window.closed', { windowId: w.windowId, reason: 'extension' })
+          return {}
+        },
+        'ui.listWindows': (params) => {
+          record('ui.listWindows', params)
+          return { windows: [...open.values()] }
+        }
+      }
+    })
+    return { ...r, calls, open }
+  }
+
+  it('advertises the windows capability', async () => {
+    const { client } = await windowsRig()
+    expect(client.hasCapability('windows')).toBe(true)
+  })
+
+  it('carries windowId and params in a window context handshake', async () => {
+    const { client } = await windowsRig('w-self')
+    expect(client.context.kind).toBe('window')
+    expect(client.context.windowId).toBe('w-self')
+    expect(client.context.params).toEqual({ app: '/x/' })
+  })
+
+  it('open sends the params as given and returns the window state', async () => {
+    const { client, calls } = await windowsRig()
+    const params = {
+      panel: 'viewer',
+      params: { app: '/signalk-wifish/' },
+      title: 'Echo sounder',
+      geometry: { anchor: 'bottom-right' as const, offset: { x: 16, y: '5%' as const }, width: 480, height: 240 },
+      userClose: 'hide' as const,
+      restoreKey: 'sounder'
+    }
+    const w = await client.windows.open(params)
+    expect(calls.at(-1)).toEqual({ method: 'ui.openWindow', params })
+    expect(w).toMatchObject({ panel: 'viewer', title: 'Echo sounder', bounds: { width: 480, height: 240 } })
+  })
+
+  it('update, focus, close and list address a window by id', async () => {
+    const { client, calls } = await windowsRig()
+    const w = await client.windows.open({ panel: 'viewer' })
+    const hidden = await client.windows.update({ windowId: w.windowId, visible: false })
+    expect(hidden.visible).toBe(false)
+    await client.windows.focus(w.windowId)
+    expect(calls.at(-1)).toEqual({ method: 'ui.focusWindow', params: { windowId: w.windowId } })
+    expect((await client.windows.list()).map((x) => x.windowId)).toEqual([w.windowId])
+    await client.windows.close(w.windowId)
+    expect(calls.at(-1)).toEqual({ method: 'ui.closeWindow', params: { windowId: w.windowId } })
+    expect(await client.windows.list()).toEqual([])
+  })
+
+  it('a window context leaves windowId out to mean itself', async () => {
+    const { client, calls, open } = await windowsRig('w-self')
+    open.set('w-self', windowState('w-self', 'viewer'))
+    await client.windows.update({ title: 'Renamed' })
+    await client.windows.focus()
+    await client.windows.close()
+    expect(calls.map((c) => c.params)).toEqual([{ title: 'Renamed' }, {}, {}])
+    expect(open.has('w-self')).toBe(false)
+  })
+
+  it('delivers window.closed to a subscribed context', async () => {
+    const { client } = await windowsRig()
+    const events: WindowClosedEvent[] = []
+    await client.subscribe(['window.*'], (_n, p) => events.push(p as WindowClosedEvent))
+    const w = await client.windows.open({ panel: 'viewer' })
+    await client.windows.close(w.windowId)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(events).toEqual([{ windowId: w.windowId, reason: 'extension' }])
+  })
+
+  it('surfaces host reasons: UNKNOWN_PANEL and windows.unknownId', async () => {
+    const { client } = await windowsRig()
+    const e1 = await client.windows.open({ panel: 'nope' }).catch((e: RpcError) => e)
+    expect((e1 as RpcError).reason).toBe('UNKNOWN_PANEL')
+    const e2 = await client.windows.close('w-missing').catch((e: RpcError) => e)
+    expect((e2 as RpcError).reason).toBe('windows.unknownId')
+  })
+
+  it('exposes the window methods through the generic call() too (JS path)', async () => {
+    const { client } = await windowsRig()
+    const w = (await client.call('ui.openWindow', { panel: 'viewer' })) as WindowState
+    expect(await client.call('ui.listWindows')).toEqual({ windows: [w] })
   })
 })

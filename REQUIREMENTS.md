@@ -122,6 +122,18 @@ specification (proposed to `SignalK/signalk-server` under
   reject with a stable `error.data.reason` from `NightModeErrorReason`
   (`nightMode.badRequest`/`notSupported`). Authoritative method/event contract lives
   in the Plotter Extensions API spec ("Night mode").
+- `windows.*` (capability `windows`): typed wrappers over the host's floating
+  windows — an extension's iframe panels shown over the chart, each its own
+  `window` context (`HandshakeContext.windowId` + `params`). Surface:
+  `windows.open(WindowOpenParams)` → `WindowState`, `windows.update(WindowUpdateParams)`
+  → `WindowState`, `windows.focus(windowId?)`, `windows.close(windowId?)` and
+  `windows.list()` → `WindowState[]`, over `ui.openWindow` / `ui.updateWindow` /
+  `ui.focusWindow` / `ui.closeWindow` / `ui.listWindows`. A left-out `windowId`
+  is sent as `{}` so a window context addresses itself. Changes are followed via
+  `window.bounds` (`WindowBoundsEvent`), `window.state` (`WindowStateEvent`) and
+  `window.closed` (`WindowClosedEvent`). Failures reject with a stable
+  `error.data.reason` from `WindowErrorReason`. Authoritative method/event
+  contract lives in the Plotter Extensions API spec ("Windows").
 - `map.*` (capability `map`): typed wrappers over the host's chart viewport.
   Surface: `map.getView()` → `MapView` (`{ center, zoom, bounds }`),
   `map.center(position, zoom?)` and `map.fitBounds(bounds)`. Changes are followed
@@ -213,6 +225,12 @@ Must stay covered (vitest, Node, no DOM):
   even while `auto`+server say night), follow-server derives `enabled` from
   `environment.mode` and re-emits `nightMode.changed` on a server-mode flip,
   `nightMode.badRequest` on an empty set, generic `call()` path.
+- `windows.*` helper conformance: `windows` capability advertised, a `window`
+  context handshake carries `windowId` + `params`, `open` sends its params
+  verbatim and returns the state, `update`/`focus`/`close`/`list` address a
+  window by id, a left-out `windowId` goes on the wire as `{}` (self),
+  `window.closed` delivery, `UNKNOWN_PANEL` / `windows.unknownId` reason
+  propagation, generic `call()` path.
 - `resourceGroup.*` helper conformance: `resourceGroups` capability advertised,
   `[ids]` replaces / `[]` clears / absent key leaves a type's display, a type the
   host does not act on is omitted from `applied`, `resourceGroup.applied` emitted
