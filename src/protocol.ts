@@ -134,7 +134,12 @@ export interface ReadyParams {
   id?: string
 }
 
-export type ContextKind = 'panel' | 'widget' | 'background' | 'embedding-host'
+export type ContextKind =
+  | 'panel'
+  | 'widget'
+  | 'window'
+  | 'background'
+  | 'embedding-host'
 
 export interface HandshakeContext {
   kind: ContextKind
@@ -146,6 +151,10 @@ export interface HandshakeContext {
   targetInstance?: string | null
   /** Manifest-local widget id of the target instance (configuration panels). */
   targetWidget?: string | null
+  /** Host-assigned id of this window (`window` contexts; capability `windows`). */
+  windowId?: string
+  /** The `params` the window was opened with (`window` contexts). */
+  params?: Record<string, unknown>
 }
 
 export interface Handshake {
@@ -543,3 +552,151 @@ export type ResourceGroupErrorReason =
   | 'resourceGroups.fetchFailed'
   | 'resourceGroups.badRequest'
   | 'resourceGroups.notSupported'
+
+/**
+ * Types for the `windows` capability — an extension's iframe panels shown as
+ * floating windows over the chart. Each window is its own context
+ * (`context.kind === 'window'`) carrying `windowId` and `params`. Geometry the
+ * extension sends is a request; the host clamps it and reports the actual
+ * `bounds` in the window state. See the Plotter Extensions API spec, "Windows".
+ */
+
+/** Where a window is anchored in the host's window area. */
+export type WindowAnchor =
+  | 'top-left'
+  | 'top-center'
+  | 'top-right'
+  | 'center-left'
+  | 'center'
+  | 'center-right'
+  | 'bottom-left'
+  | 'bottom-center'
+  | 'bottom-right'
+
+/**
+ * A length: CSS pixels as a number, or a percentage of the window area as a
+ * string such as `"40%"`.
+ */
+export type WindowLength = number | `${number}%`
+
+/**
+ * Requested size and position, relative to the host's window area. `offset` is
+ * measured inward from the anchored edges (on a centered axis, positive moves
+ * right/down). Fields left out take the host's choice (on open) or keep their
+ * current value (on update).
+ */
+export interface WindowGeometry {
+  anchor?: WindowAnchor
+  offset?: { x?: WindowLength; y?: WindowLength }
+  width?: WindowLength
+  height?: WindowLength
+  minWidth?: WindowLength
+  minHeight?: WindowLength
+  maxWidth?: WindowLength
+  maxHeight?: WindowLength
+}
+
+/** Params of `ui.openWindow`. */
+export interface WindowOpenParams {
+  /** Id of an iframe panel in the caller's manifest. */
+  panel: string
+  /** Handed to the window in its handshake as `context.params`. */
+  params?: Record<string, unknown>
+  /** Title-bar text; defaults to the panel's `title`. */
+  title?: string
+  geometry?: WindowGeometry
+  /** Block the chart and every other window until closed. Default `false`. */
+  modal?: boolean
+  /** Whether the user may resize it. Default `true`. */
+  resizable?: boolean
+  /** Whether the user may move it. Default `true`. */
+  movable?: boolean
+  /** Default `'fixed'`; `'autoHide'` hides the title bar when idle. */
+  titleBar?: 'fixed' | 'autoHide'
+  /** What the user's close control does. Default `'close'`. */
+  userClose?: 'close' | 'hide'
+  /** `false` opens the window hidden (loaded, not shown). Default `true`. */
+  visible?: boolean
+  /** Reuse an open window of this panel instead of opening another. */
+  single?: boolean
+  /** Remember this window's geometry under this key (per extension). */
+  restoreKey?: string
+}
+
+/** Params of `ui.updateWindow`. `windowId` defaults to self in a window context. */
+export interface WindowUpdateParams {
+  windowId?: string
+  title?: string
+  geometry?: WindowGeometry
+  visible?: boolean
+}
+
+/** A window's actual position and size, in CSS px from the window area's top-left. */
+export interface WindowBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/** The size of the host's window area, in CSS px. */
+export interface WindowArea {
+  width: number
+  height: number
+}
+
+/** How the host is showing a window. */
+export type WindowPresentation = 'floating' | 'sheet' | 'fullscreen'
+
+/**
+ * A window's state — the result of `ui.openWindow` / `ui.updateWindow`, an
+ * entry of `ui.listWindows`, and the payload of `window.state`.
+ */
+export interface WindowState {
+  windowId: string
+  /** The manifest panel the window shows. */
+  panel: string
+  title: string
+  presentation: WindowPresentation
+  bounds: WindowBounds
+  area: WindowArea
+  visible: boolean
+  /** Host feature: collapsed to its title bar (still running). */
+  collapsed: boolean
+  /** Host feature: popped out into a separate browser window. */
+  poppedOut: boolean
+  modal: boolean
+}
+
+/** Result of `ui.listWindows` — the caller's extension's open windows. */
+export interface WindowListResult {
+  windows: WindowState[]
+}
+
+/** Payload of a `window.bounds` host event — a window's actual geometry changed. */
+export interface WindowBoundsEvent {
+  windowId: string
+  bounds: WindowBounds
+  area: WindowArea
+}
+
+/** Payload of a `window.state` host event (visibility, collapse, pop-out, presentation or title changed). */
+export type WindowStateEvent = WindowState
+
+/** Why a window closed. */
+export type WindowCloseReason = 'user' | 'extension' | 'host'
+
+/** Payload of a `window.closed` host event — the window closed and its page unloaded. */
+export interface WindowClosedEvent {
+  windowId: string
+  reason: WindowCloseReason
+}
+
+/** Stable `error.data.reason` strings for window host-method failures. */
+export type WindowErrorReason =
+  | 'windows.badRequest'
+  | 'windows.unknownId'
+  | 'windows.limit'
+  | 'windows.modalOpen'
+  | 'windows.notSupported'
+  | 'UNKNOWN_PANEL'

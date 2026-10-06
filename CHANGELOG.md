@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.16.0
+
+Floating windows. A new capability, `windows`, lets an extension show one of its
+own iframe panels in a window over the chart instead of the host's drawer —
+several at once, each its own context. `BUS_ID` stays `plotterExt/1`: everything
+is additive.
+
+- **New context kind `window`.** `ContextKind` gains `'window'`, and
+  `HandshakeContext` gains optional `windowId` and `params` (the object the
+  window was opened with).
+- **New client wrapper `client.windows`:** `open`, `update`, `focus`, `close`
+  and `list`, over `ui.openWindow`, `ui.updateWindow`, `ui.focusWindow`,
+  `ui.closeWindow` and `ui.listWindows`. In a window context, leaving out
+  `windowId` addresses the window itself.
+- **New types:** `WindowAnchor`, `WindowLength`, `WindowGeometry`,
+  `WindowOpenParams`, `WindowUpdateParams`, `WindowBounds`, `WindowArea`,
+  `WindowPresentation`, `WindowState`, `WindowListResult`, the event payloads
+  `WindowBoundsEvent` / `WindowStateEvent` / `WindowClosedEvent`,
+  `WindowCloseReason` and `WindowErrorReason`.
+- Geometry is a request: the host clamps it and reports the actual `bounds`,
+  and may show a window as a `sheet` or `fullscreen` instead of `floating`.
+- Spec: Plotter Extensions API, "Windows".
+
 ## 0.15.0
 
 Waypoint links on route points. `RoutePoint` gains an optional `href` — a link
