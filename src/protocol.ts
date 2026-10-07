@@ -702,6 +702,37 @@ export type WindowErrorReason =
   | 'UNKNOWN_PANEL'
 
 /**
+ * Types for the `panels.state` capability — whether each of an extension's
+ * loaded panels is on screen. `visible` is the host's presentation (its drawer
+ * showing the panel, its dialog open), not the browser tab's visibility. A
+ * panel shown in a window is a `window` context and is not covered here. See
+ * the Plotter Extensions API spec, "Panel state".
+ */
+
+/** A loaded panel's state — an entry of `ui.listPanels` and the payload of `panel.state`. */
+export interface PanelState {
+  /** The panel's manifest id. */
+  panel: string
+  /** Whether the host is presenting the panel in its UI. */
+  visible: boolean
+  /** Host feature: shown reduced to its header (still `visible`). Always `false` without it. */
+  collapsed: boolean
+  /** Configuration panels opened for a widget instance: the instance being configured. */
+  targetInstance?: string
+}
+
+/** Result of `ui.listPanels` — the caller's extension's loaded panels. */
+export interface PanelListResult {
+  panels: PanelState[]
+}
+
+/** Payload of a `panel.state` host event — a loaded panel was shown, hidden, collapsed or expanded. */
+export type PanelStateEvent = PanelState
+
+/** Stable `error.data.reason` strings for `ui.listPanels` failures. */
+export type PanelErrorReason = 'panels.notSupported'
+
+/**
  * Types for the `events.publish` capability — extension-originated events. A
  * context publishes a topic and the host delivers it, exactly like a host
  * event, to every subscribed context in `scope` (the publisher included). The

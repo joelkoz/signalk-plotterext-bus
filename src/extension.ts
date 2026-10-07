@@ -8,6 +8,8 @@ import {
   HandshakeContext,
   MapView,
   NightModeState,
+  PanelListResult,
+  PanelState,
   PublishScope,
   ReadyParams,
   ResourceGroupApplyResult,
@@ -309,6 +311,20 @@ export class ExtensionClient {
     },
     set: async (state: Partial<NightModeState>): Promise<void> => {
       await this.call('nightMode.set', state)
+    }
+  }
+
+  /**
+   * Panel visibility (capability `panels.state`): the state of each of this
+   * extension's loaded panels. Follow changes with the `panel.state` event,
+   * which every context of the extension receives; subscribe first, then
+   * `list()`, so no change is missed. A plain-JS extension can call
+   * `client.call('ui.listPanels')` with no behavioural difference.
+   */
+  readonly panels = {
+    list: async (): Promise<PanelState[]> => {
+      const r = (await this.call('ui.listPanels')) as PanelListResult
+      return r.panels
     }
   }
 

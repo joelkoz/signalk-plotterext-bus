@@ -186,6 +186,12 @@ A failing window method (`ui.openWindow`, `ui.updateWindow`, `ui.focusWindow`,
 | `windows.modalOpen` | Another modal window is already open. |
 | `windows.notSupported` | The host does not implement windows. |
 
+### Panel error reasons
+
+`ui.listPanels` rejects with a JSON-RPC error whose `error.data.reason` is the
+`PanelErrorReason` string `panels.notSupported` when the host does not
+implement panel state.
+
 ### Publish error reasons
 
 `events.publish` rejects with a JSON-RPC error whose `error.data.reason` is the
@@ -289,6 +295,18 @@ if (client.hasCapability('windows')) {
   })
   // await client.windows.update({ windowId: w.windowId, visible: true })
   // await client.windows.list(); client.windows.focus(id); client.windows.close(id)
+}
+
+// Panel visibility (capability `panels.state`) — a keepAlive panel stays loaded
+// while closed; pause work nobody can see. Every context of the extension gets
+// `panel.state`, so filter on the panel id. Subscribe first, then list.
+if (client.hasCapability('panels.state')) {
+  const self = client.context.id
+  await client.subscribe(['panel.state'], (_name, state) => {
+    if (state.panel === self) state.visible ? resume() : pause()
+  })
+  const mine = (await client.panels.list()).find((p) => p.panel === self)
+  if (mine && !mine.visible) pause()
 }
 
 // Chart viewport (capability `map`) — follow where the user is looking instead

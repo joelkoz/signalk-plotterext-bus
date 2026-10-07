@@ -134,6 +134,14 @@ specification (proposed to `SignalK/signalk-server` under
   `window.closed` (`WindowClosedEvent`). Failures reject with a stable
   `error.data.reason` from `WindowErrorReason`. Authoritative method/event
   contract lives in the Plotter Extensions API spec ("Windows").
+- `panels.*` (capability `panels.state`): a typed wrapper over the host's panel
+  visibility reports. Surface: `panels.list()` → `PanelState[]` (`{ panel,
+  visible, collapsed, targetInstance? }`), over `ui.listPanels`. Changes are
+  followed via `panel.state` (`PanelStateEvent`), which the host sends to every
+  subscribed context of the owning extension. Failures reject with a stable
+  `error.data.reason` from `PanelErrorReason` (`panels.notSupported`).
+  Authoritative method/event contract lives in the Plotter Extensions API spec
+  ("Panel state").
 - `map.*` (capability `map`): typed wrappers over the host's chart viewport.
   Surface: `map.getView()` → `MapView` (`{ center, zoom, bounds }`),
   `map.center(position, zoom?)` and `map.fitBounds(bounds)`. Changes are followed
@@ -231,6 +239,10 @@ Must stay covered (vitest, Node, no DOM):
   window by id, a left-out `windowId` goes on the wire as `{}` (self),
   `window.closed` delivery, `UNKNOWN_PANEL` / `windows.unknownId` reason
   propagation, generic `call()` path.
+- `panels.*` helper conformance: `panels.state` capability advertised, `list`
+  calls `ui.listPanels` and unwraps `panels`, generic `call()` path returns the
+  raw result, `panel.state` delivered only to a subscribed context,
+  `panels.notSupported` reason propagation.
 - `resourceGroup.*` helper conformance: `resourceGroups` capability advertised,
   `[ids]` replaces / `[]` clears / absent key leaves a type's display, a type the
   host does not act on is omitted from `applied`, `resourceGroup.applied` emitted
