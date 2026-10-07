@@ -12,6 +12,8 @@ import {
   MapView,
   MapViewEvent,
   NightModeChangedEvent,
+  PanelState,
+  PanelStateEvent,
   ResourceGroup,
   ResourceGroupAppliedEvent,
   ResourceGroupType,
@@ -1494,5 +1496,71 @@ describe('windows helpers', () => {
     const { client } = await windowsRig()
     const w = (await client.call('ui.openWindow', { panel: 'viewer' })) as WindowState
     expect(await client.call('ui.listWindows')).toEqual({ windows: [w] })
+  })
+})
+
+describe('panel state helpers', () => {
+  // A tiny in-memory host mirroring the `panels.state` capability: it records
+  // every call and keeps the extension's loaded panels.
+  async function panelsRig(capable = true) {
+    const calls: { method: string; params: unknown }[] = []
+    const loaded: PanelState[] = [
+      { panel: 'app-panel', visible: true, collapsed: false },
+      { panel: 'settings', visible: false, collapsed: false, targetInstance: 'w-1' }
+    ]
+    const r = await rig({
+      hostInfo: {
+        ...HOST_INFO,
+        capabilities: capable ? [...HOST_INFO.capabilities, 'panels.state'] : HOST_INFO.capabilities
+      },
+      context: { kind: 'panel', id: 'app-panel', instanceId: null },
+      methods: {
+        'ui.listPanels': (params) => {
+          calls.push({ method: 'ui.listPanels', params })
+          if (!capable) {
+            throw new RpcError('Panel state not supported', { reason: 'panels.notSupported' })
+          }
+          return { panels: loaded }
+        }
+      }
+    })
+    return { ...r, calls, loaded }
+  }
+
+  it('advertises the panels.state capability', async () => {
+    const { client } = await panelsRig()
+    expect(client.hasCapability('panels.state')).toBe(true)
+  })
+
+  it('list calls ui.listPanels and unwraps the panels', async () => {
+    const { client, calls, loaded } = await panelsRig()
+    expect(await client.panels.list()).toEqual(loaded)
+    expect(calls).toEqual([{ method: 'ui.listPanels', params: undefined }])
+  })
+
+  it('the generic call returns the raw result', async () => {
+    const { client, loaded } = await panelsRig()
+    expect(await client.call('ui.listPanels')).toEqual({ panels: loaded })
+  })
+
+  it('delivers panel.state to a subscribed context', async () => {
+    const { client, host } = await panelsRig()
+    const events: PanelStateEvent[] = []
+    await client.subscribe(['panel.state'], (_n, p) => events.push(p as PanelStateEvent))
+    const hidden: PanelStateEvent = { panel: 'app-panel', visible: false, collapsed: false }
+    expect(host.publish('panel.state', hidden)).toBe(true)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(events).toEqual([hidden])
+  })
+
+  it('does not deliver panel.state without a subscription', async () => {
+    const { host } = await panelsRig()
+    expect(host.publish('panel.state', { panel: 'app-panel', visible: false, collapsed: false })).toBe(false)
+  })
+
+  it('a host without the capability rejects with panels.notSupported', async () => {
+    const { client } = await panelsRig(false)
+    expect(client.hasCapability('panels.state')).toBe(false)
+    await expect(client.panels.list()).rejects.toHaveProperty('reason', 'panels.notSupported')
   })
 })

@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.18.0
+
+Panel visibility. A new capability, `panels.state`, tells an extension whether
+each of its loaded panels is on screen, so a `keepAlive` panel can pause work
+while hidden and a background runtime can follow its panels. `BUS_ID` stays
+`plotterExt/1`: everything is additive.
+
+- **New client helper `client.panels.list()`** over the new host method
+  `ui.listPanels`, which returns `{ panels }`: the state of every loaded panel
+  of the caller's extension.
+- **New host event `panel.state`** — `{ panel, visible, collapsed,
+  targetInstance? }`, sent to the owning extension's subscribed contexts when
+  one of its loaded panels is shown, hidden, collapsed or expanded.
+  `visible` is the host's presentation (drawer showing it, dialog open), not
+  the browser tab's visibility; `collapsed` is an optional host feature,
+  always `false` without it. Panels shown in windows are `window` contexts and
+  are not reported here.
+- **New types:** `PanelState`, `PanelListResult`, `PanelStateEvent`,
+  `PanelErrorReason` (`panels.notSupported`).
+- Spec: Plotter Extensions API, "Panel state".
+
 ## 0.17.0
 
 Extension-originated events. A new capability, `events.publish`, lets an
