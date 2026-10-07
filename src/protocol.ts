@@ -700,3 +700,28 @@ export type WindowErrorReason =
   | 'windows.modalOpen'
   | 'windows.notSupported'
   | 'UNKNOWN_PANEL'
+
+/**
+ * Types for the `events.publish` capability — extension-originated events. A
+ * context publishes a topic and the host delivers it, exactly like a host
+ * event, to every subscribed context in `scope` (the publisher included). The
+ * delivered event carries no sender identity. The `publish` button action
+ * (deprecated alias `sendMessage`) is the same operation. See the Plotter
+ * Extensions API spec, "Publishing events".
+ */
+
+/** Who may receive a published event. */
+export type PublishScope = 'all' | 'extension'
+
+/** Params of `events.publish`. */
+export interface PublishParams {
+  /** Literal event name: non-empty, no `*`, not in the `bus.*` namespace. */
+  topic: string
+  /** Delivered unchanged as the event's `params`. */
+  params?: unknown
+  /** Default `'all'`. */
+  scope?: PublishScope
+}
+
+/** Stable `error.data.reason` strings for `events.publish` failures. */
+export type PublishErrorReason = 'events.badRequest'

@@ -116,6 +116,14 @@ Implemented by `HostConnection` automatically:
 | `events.subscribe` | `{ patterns: string[] }` | `{ subscriptionId }` |
 | `events.unsubscribe` | `{ subscriptionId }` | `{}` |
 
+`events.publish` (`{ topic, params?, scope? }` → `{}`, capability
+`events.publish`) is **not** built in: routing an extension's event to other
+contexts needs the host's view of every connection. A host implements it by
+validating with the exported `parsePublishParams(params)` (applies the default
+`scope: 'all'`, throws `events.badRequest`) and calling `publish(topic, params)`
+on each connection in scope — all of them, or only the publishing extension's.
+A `publish` (or deprecated `sendMessage`) button action is the same operation.
+
 Host API methods (`state.*`, `signalk.*`, `map.*`, `route.*`, `chart.*`, …) are
 supplied by the embedding host application; see the plotter extension
 specification for the vocabulary. The client exposes typed convenience wrappers
@@ -177,6 +185,12 @@ A failing window method (`ui.openWindow`, `ui.updateWindow`, `ui.focusWindow`,
 | `windows.limit` | The host will not open more windows. |
 | `windows.modalOpen` | Another modal window is already open. |
 | `windows.notSupported` | The host does not implement windows. |
+
+### Publish error reasons
+
+`events.publish` rejects with a JSON-RPC error whose `error.data.reason` is the
+`PublishErrorReason` string `events.badRequest`: a missing or empty `topic`, a
+`topic` containing `*` or in the `bus.*` namespace, or an unknown `scope`.
 
 ### Resource-group error reasons
 
@@ -301,6 +315,16 @@ if (client.hasCapability('resourceGroups')) {
   // `applied` = the types the host acted on (best effort), e.g. ['routes', 'charts'].
   // Follow applies from any origin, including the user's own group picker:
   await client.subscribe(['resourceGroup.applied'], (_name, { id }) => highlight(id))
+}
+```
+
+Publish your own events (capability `events.publish`). Subscribers receive
+them exactly like host events, the publisher included if it subscribed:
+
+```js
+if (client.hasCapability('events.publish')) {
+  await client.publish('my-ext.refresh', { radius: 20 }, 'extension') // own extension only
+  await client.publish('my-ext.results', { count: 12 })               // scope 'all' (default)
 }
 ```
 

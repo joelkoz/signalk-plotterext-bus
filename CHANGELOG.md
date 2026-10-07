@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.17.0
+
+Extension-originated events. A new capability, `events.publish`, lets an
+extension context publish events onto the bus as well as subscribe to them.
+`BUS_ID` stays `plotterExt/1`: everything is additive.
+
+- **New client method `client.publish(topic, params?, scope?)`** over the new
+  host method `events.publish`. `scope` is `'all'` (default — every subscribed
+  context, any extension) or `'extension'` (the publisher's own contexts). The
+  publisher receives its own event if it subscribed. Delivered events carry no
+  sender identity and look exactly like host events.
+- **New host helper `parsePublishParams(params)`** validates the params, applies
+  the default scope and throws `events.badRequest`, so every host rejects the
+  same inputs. Routing stays with the host application.
+- **New types:** `PublishScope`, `PublishParams`, `PublishErrorReason`.
+- The `sendMessage` button action is renamed `publish` (with the same `scope`
+  option); `sendMessage` remains a permanent deprecated alias.
+- Spec: Plotter Extensions API, "Publishing events".
+
 ## 0.16.0
 
 Floating windows. A new capability, `windows`, lets an extension show one of its
