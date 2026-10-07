@@ -8,6 +8,7 @@ import {
   HandshakeContext,
   MapView,
   NightModeState,
+  PublishScope,
   ReadyParams,
   ResourceGroupApplyResult,
   RouteData,
@@ -112,6 +113,25 @@ export class ExtensionClient {
         // Best-effort: the host may already have dropped the connection.
       })
     }
+  }
+
+  /**
+   * Publish an event onto the bus (capability `events.publish`). The host
+   * delivers it to every context in `scope` whose subscriptions match —
+   * including this one — exactly as it delivers host events. `scope` defaults
+   * to `'all'` (any extension); `'extension'` keeps it to this extension's own
+   * contexts. Resolves once the host has delivered it; there is no reply.
+   */
+  async publish(
+    topic: string,
+    params?: unknown,
+    scope?: PublishScope
+  ): Promise<void> {
+    await this.call('events.publish', {
+      topic,
+      ...(params !== undefined ? { params } : {}),
+      ...(scope ? { scope } : {})
+    })
   }
 
   /** Host-persisted key/value state (see spec: State Storage). */

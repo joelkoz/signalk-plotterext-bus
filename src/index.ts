@@ -1,6 +1,7 @@
 export * from './protocol'
 export * from './wildcard'
 export * from './bounds'
+export * from './publish'
 export * from './codec'
 export * from './port'
 export { BusEndpoint } from './endpoint'
