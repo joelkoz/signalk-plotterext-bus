@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.20.0
+
+Image overlay follow-ups. Everything is additive; `BUS_ID` stays
+`plotterExt/1`.
+
+- **`HandshakeContext.targetOverlay`** — set for a configuration panel the host
+  opened for an image overlay (an overlay's manifest `configPanel`).
+- **`PanelState.targetOverlay`** — the same, in `ui.listPanels` / `panel.state`.
+- **`OverlayRequestEvent.liveInterval`** — the least time, in ms, the host
+  leaves between live frames it accepts, so a runtime can pace itself.
+- Spec: Plotter Extensions API, "Map overlays" (`configPanel`,
+  `preferredPixelRatio`, `liveInterval`, and the safety rule over band placement).
+
 ## 0.19.0
 
 Image map overlays. A new capability, `overlays.image`, lets an extension's

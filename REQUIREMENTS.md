@@ -144,7 +144,9 @@ specification (proposed to `SignalK/signalk-server` under
   `overlay.request` (`OverlayRequestEvent`) and reports visibility with
   `overlay.state` (`OverlayStateEvent`). Failures reject with a stable
   `error.data.reason` from `OverlayErrorReason`; refused frames resolve with an
-  `OverlayFrameRefusal`. Authoritative method/event contract lives in the
+  `OverlayFrameRefusal`. `OverlayRequestEvent.liveInterval` (optional) carries
+  the host's live-frame pace; an overlay configuration panel's handshake context
+  carries `targetOverlay` (also on `PanelState`). Authoritative method/event contract lives in the
   Plotter Extensions API spec ("Map overlays").
 - Transfer lists: `BusPort.post(data, transfer?)`, `BusEndpoint.call(…, {
   transfer })`, `BusEndpoint.notify(…, { transfer })` and `client.call(…, {

@@ -151,6 +151,8 @@ export interface HandshakeContext {
   targetInstance?: string | null
   /** Manifest-local widget id of the target instance (configuration panels). */
   targetWidget?: string | null
+  /** Image overlay a configuration panel was opened for (capability `overlays.image`). */
+  targetOverlay?: string | null
   /** Host-assigned id of this window (`window` contexts; capability `windows`). */
   windowId?: string
   /** The `params` the window was opened with (`window` contexts). */
@@ -754,6 +756,12 @@ export interface OverlayRequestEvent {
   zoom: number
   /** Map rotation, radians clockwise. Advisory: for keeping labels upright only. */
   rotation: number
+  /**
+   * Least time, in ms, the host leaves between live frames it accepts. Absent
+   * when the host does not say; a faster live frame is refused as
+   * `overlays.throttled`.
+   */
+  liveInterval?: number
 }
 
 /** Params of `overlay.frame`. */
@@ -807,6 +815,8 @@ export interface PanelState {
   collapsed: boolean
   /** Configuration panels opened for a widget instance: the instance being configured. */
   targetInstance?: string
+  /** Configuration panels opened for an image overlay: the overlay being configured. */
+  targetOverlay?: string
 }
 
 /** Result of `ui.listPanels` — the caller's extension's loaded panels. */
