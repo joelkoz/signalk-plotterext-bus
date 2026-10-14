@@ -702,6 +702,94 @@ export type WindowErrorReason =
   | 'UNKNOWN_PANEL'
 
 /**
+ * Types for the `overlays.image` capability — map layers whose pixels an
+ * extension's background runtime draws and the host composites. The host asks
+ * for frames (`overlay.request`); the runtime answers with `overlay.frame`,
+ * whose `image` is an `ImageBitmap` sent in the `postMessage` transfer list —
+ * the one non-JSON value on the wire. See the Plotter Extensions API spec,
+ * "Map overlays".
+ */
+
+/** Where an overlay sits relative to the host's own content. */
+export type OverlayBand = 'aboveCharts' | 'aboveResources'
+
+/** An overlay's current state — an entry of `overlay.list`. */
+export interface OverlayInfo {
+  /** The overlay's manifest id. */
+  id: string
+  title: string
+  band: OverlayBand
+  visible: boolean
+  /** 0..1 */
+  opacity: number
+  /** The host has paused the overlay to stay within its budget. */
+  suspended: boolean
+}
+
+/** Result of `overlay.list` — the caller's extension's overlays. */
+export interface OverlayListResult {
+  overlays: OverlayInfo[]
+}
+
+/**
+ * Payload of an `overlay.request` host event — the host wants a frame. The
+ * image covers `extent`, a north-up axis-aligned box in EPSG:3857 metres
+ * `[minX, minY, maxX, maxY]` (it may run past ±20037508.34 across the
+ * antimeridian), with pixels spaced evenly in Mercator; row 0 is the north
+ * edge.
+ */
+export interface OverlayRequestEvent {
+  overlayId: string
+  requestId: string
+  extent: [number, number, number, number]
+  /** The same box as lon/lat `[west, south, east, north]` (west > east across the antimeridian). */
+  bounds: [number, number, number, number]
+  /** Image size in pixels. */
+  width: number
+  height: number
+  /** Image pixels per CSS pixel, chosen by the host. */
+  pixelRatio: number
+  /** Metres per image pixel. */
+  resolution: number
+  zoom: number
+  /** Map rotation, radians clockwise. Advisory: for keeping labels upright only. */
+  rotation: number
+}
+
+/** Params of `overlay.frame`. */
+export interface OverlayFrameParams {
+  overlayId: string
+  /** The request this frame answers; omit for a live update of the latest request's extent. */
+  requestId?: string
+  extent: [number, number, number, number]
+  /** Transparent, premultiplied-alpha image of the requested size; transferred. */
+  image: ImageBitmap
+}
+
+/** Why the host refused a frame (a result, not an error). */
+export type OverlayFrameRefusal = 'overlays.superseded' | 'overlays.throttled'
+
+/** Result of `overlay.frame`. */
+export interface OverlayFrameResult {
+  accepted: boolean
+  reason?: OverlayFrameRefusal
+}
+
+/** Payload of an `overlay.state` host event — an overlay was shown, hidden, faded, suspended or resumed. */
+export interface OverlayStateEvent {
+  overlayId: string
+  visible: boolean
+  opacity: number
+  suspended: boolean
+}
+
+/** Stable `error.data.reason` strings for `overlay.*` host-method failures. */
+export type OverlayErrorReason =
+  | 'overlays.unknownId'
+  | 'overlays.badRequest'
+  | 'overlays.notSupported'
+
+/**
  * Types for the `panels.state` capability — whether each of an extension's
  * loaded panels is on screen. `visible` is the host's presentation (its drawer
  * showing the panel, its dialog open), not the browser tab's visibility. A

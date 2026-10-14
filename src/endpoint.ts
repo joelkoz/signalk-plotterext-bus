@@ -93,16 +93,30 @@ export class BusEndpoint {
     return () => this.eventHandlers.delete(entry)
   }
 
-  /** Send a notification (an event) to the peer. */
-  notify(method: string, params?: unknown): void {
-    this.send({ jsonrpc: '2.0', method, ...(params !== undefined ? { params } : {}) })
+  /**
+   * Send a notification (an event) to the peer. `opts.transfer` moves the
+   * listed objects instead of copying them.
+   */
+  notify(
+    method: string,
+    params?: unknown,
+    opts: { transfer?: Transferable[] } = {}
+  ): void {
+    this.send(
+      { jsonrpc: '2.0', method, ...(params !== undefined ? { params } : {}) },
+      opts.transfer
+    )
   }
 
-  /** Call a method on the peer; resolves with its result. */
+  /**
+   * Call a method on the peer; resolves with its result. `opts.transfer`
+   * moves the listed objects (e.g. an `ImageBitmap` inside `params`) instead
+   * of copying them.
+   */
   call(
     method: string,
     params?: unknown,
-    opts: { timeoutMs?: number } = {}
+    opts: { timeoutMs?: number; transfer?: Transferable[] } = {}
   ): Promise<unknown> {
     if (this.closed) {
       return Promise.reject(
@@ -128,12 +142,15 @@ export class BusEndpoint {
             }, timeoutMs)
           : null
       this.pending.set(id, { resolve, reject, timer })
-      this.send({
-        jsonrpc: '2.0',
-        id,
-        method,
-        ...(params !== undefined ? { params } : {})
-      })
+      this.send(
+        {
+          jsonrpc: '2.0',
+          id,
+          method,
+          ...(params !== undefined ? { params } : {})
+        },
+        opts.transfer
+      )
     })
   }
 
@@ -154,9 +171,9 @@ export class BusEndpoint {
     this.eventHandlers.clear()
   }
 
-  private send(msg: JsonRpcMessage): void {
+  private send(msg: JsonRpcMessage, transfer?: Transferable[]): void {
     if (this.closed) return
-    this.port.post(wrap(msg))
+    this.port.post(wrap(msg), transfer)
   }
 
   private onData(data: unknown): void {

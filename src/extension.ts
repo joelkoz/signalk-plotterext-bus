@@ -8,6 +8,10 @@ import {
   HandshakeContext,
   MapView,
   NightModeState,
+  OverlayFrameParams,
+  OverlayFrameResult,
+  OverlayInfo,
+  OverlayListResult,
   PanelListResult,
   PanelState,
   PublishScope,
@@ -75,11 +79,14 @@ export class ExtensionClient {
     return this.handshake.capabilities.includes(id)
   }
 
-  /** Call a host API method. */
+  /**
+   * Call a host API method. `opts.transfer` moves the listed objects instead
+   * of copying them — only `overlay.frame` needs it in this version.
+   */
   call(
     method: string,
     params?: unknown,
-    opts?: { timeoutMs?: number }
+    opts?: { timeoutMs?: number; transfer?: Transferable[] }
   ): Promise<unknown> {
     return this.endpoint.call(method, params, opts)
   }
@@ -325,6 +332,34 @@ export class ExtensionClient {
     list: async (): Promise<PanelState[]> => {
       const r = (await this.call('ui.listPanels')) as PanelListResult
       return r.panels
+    }
+  }
+
+  /**
+   * Image map overlays (capability `overlays.image`): map layers this
+   * extension's background runtime draws. The host asks for frames with the
+   * `overlay.request` event (`OverlayRequestEvent`) and reports visibility
+   * with `overlay.state` (`OverlayStateEvent`); the runtime answers each
+   * request with `frame()`, keeping one frame in flight. `frame()` transfers
+   * `image`, so the caller no longer owns it afterwards. A plain-JS extension
+   * can call `client.call('overlay.frame', params, { transfer: [image] })`
+   * with no behavioural difference.
+   */
+  readonly overlays = {
+    list: async (): Promise<OverlayInfo[]> => {
+      const r = (await this.call('overlay.list')) as OverlayListResult
+      return r.overlays
+    },
+    setVisibility: async (ids: string[], visible: boolean): Promise<void> => {
+      await this.call('overlay.setVisibility', { ids, visible })
+    },
+    setOpacity: async (ids: string[], opacity: number): Promise<void> => {
+      await this.call('overlay.setOpacity', { ids, opacity })
+    },
+    frame: async (params: OverlayFrameParams): Promise<OverlayFrameResult> => {
+      return (await this.call('overlay.frame', params, {
+        transfer: [params.image]
+      })) as OverlayFrameResult
     }
   }
 

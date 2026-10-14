@@ -140,3 +140,40 @@ describe('BusEndpoint events', () => {
     expect(seen).toEqual(['ping'])
   })
 })
+
+describe('BusEndpoint transfer', () => {
+  it('moves a transferred buffer to the peer instead of copying it', async () => {
+    const { a, b } = pair()
+    cleanups.push(() => (a.close(), b.close()))
+    let received: ArrayBuffer | undefined
+    b.registerMethod('blob.take', (params) => {
+      received = (params as { data: ArrayBuffer }).data
+      return received.byteLength
+    })
+    const data = new Uint8Array([1, 2, 3, 4]).buffer
+    await expect(a.call('blob.take', { data }, { transfer: [data] })).resolves.toBe(4)
+    expect(data.byteLength).toBe(0) // detached on the sender
+    expect([...new Uint8Array(received!)]).toEqual([1, 2, 3, 4])
+  })
+
+  it('copies (does not detach) when no transfer list is given', async () => {
+    const { a, b } = pair()
+    cleanups.push(() => (a.close(), b.close()))
+    b.registerMethod('blob.take', (params) => (params as { data: ArrayBuffer }).data.byteLength)
+    const data = new Uint8Array([1, 2, 3]).buffer
+    await expect(a.call('blob.take', { data })).resolves.toBe(3)
+    expect(data.byteLength).toBe(3)
+  })
+
+  it('transfers on a notification', async () => {
+    const { a, b } = pair()
+    cleanups.push(() => (a.close(), b.close()))
+    const got = new Promise<number>((resolve) =>
+      b.onEvent(['blob.sent'], (_n, p) => resolve((p as { data: ArrayBuffer }).data.byteLength))
+    )
+    const data = new Uint8Array([9, 9]).buffer
+    a.notify('blob.sent', { data }, { transfer: [data] })
+    expect(data.byteLength).toBe(0)
+    await expect(got).resolves.toBe(2)
+  })
+})
