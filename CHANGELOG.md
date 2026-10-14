@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.19.0
+
+Image map overlays. A new capability, `overlays.image`, lets an extension's
+background runtime draw a map layer that the host composites into its own
+layer stack. `BUS_ID` stays `plotterExt/1`: everything is additive.
+
+- **Transfer lists.** `BusPort.post(data, transfer?)`, and a `transfer` option
+  on `BusEndpoint.call` / `notify` and `client.call`, move objects such as an
+  `ImageBitmap` through `postMessage` instead of copying them. Without a
+  transfer list nothing changes on the wire.
+- **New client helpers `client.overlays.*`** — `list()`, `setVisibility()`,
+  `setOpacity()` and `frame()`, over the new host methods `overlay.list`,
+  `overlay.setVisibility`, `overlay.setOpacity` and `overlay.frame`. `frame()`
+  transfers its `image`.
+- **New host events** `overlay.request` (the host wants a frame: a north-up
+  EPSG:3857 `extent`, `width` × `height`, `pixelRatio`, advisory `rotation`) and
+  `overlay.state` (`{ overlayId, visible, opacity, suspended }`).
+- **The one non-JSON value on the wire:** `overlay.frame`'s `image`.
+- **New types:** `OverlayBand`, `OverlayInfo`, `OverlayListResult`,
+  `OverlayRequestEvent`, `OverlayFrameParams`, `OverlayFrameResult`,
+  `OverlayFrameRefusal`, `OverlayStateEvent`, `OverlayErrorReason`.
+- Spec: Plotter Extensions API, "Map overlays".
+
 ## 0.18.0
 
 Panel visibility. A new capability, `panels.state`, tells an extension whether

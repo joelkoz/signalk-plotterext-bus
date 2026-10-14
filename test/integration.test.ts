@@ -12,6 +12,10 @@ import {
   MapView,
   MapViewEvent,
   NightModeChangedEvent,
+  OverlayFrameParams,
+  OverlayInfo,
+  OverlayRequestEvent,
+  OverlayStateEvent,
   PanelState,
   PanelStateEvent,
   ResourceGroup,
@@ -1562,5 +1566,147 @@ describe('panel state helpers', () => {
     const { client } = await panelsRig(false)
     expect(client.hasCapability('panels.state')).toBe(false)
     await expect(client.panels.list()).rejects.toHaveProperty('reason', 'panels.notSupported')
+  })
+})
+
+describe('overlay helpers', () => {
+  // A tiny in-memory host mirroring the `overlays.image` capability: it records
+  // every call, keeps the extension's overlays, and refuses frames for a
+  // superseded request.
+  async function overlaysRig(capable = true) {
+    const calls: { method: string; params: unknown }[] = []
+    const overlays: OverlayInfo[] = [
+      { id: 'depth', title: 'Live depth', band: 'aboveCharts', visible: true, opacity: 0.85, suspended: false }
+    ]
+    let latestRequest = 'r-2'
+    const frames: OverlayFrameParams[] = []
+    const notSupported = () => {
+      throw new RpcError('Overlays not supported', { reason: 'overlays.notSupported' })
+    }
+    const r = await rig({
+      hostInfo: {
+        ...HOST_INFO,
+        capabilities: capable
+          ? [...HOST_INFO.capabilities, 'background.iframe', 'overlays.image']
+          : HOST_INFO.capabilities
+      },
+      context: { kind: 'background', id: 'renderer', instanceId: null },
+      methods: {
+        'overlay.list': (params) => {
+          calls.push({ method: 'overlay.list', params })
+          if (!capable) notSupported()
+          return { overlays }
+        },
+        'overlay.setVisibility': (params) => {
+          calls.push({ method: 'overlay.setVisibility', params })
+          return {}
+        },
+        'overlay.setOpacity': (params) => {
+          calls.push({ method: 'overlay.setOpacity', params })
+          return {}
+        },
+        'overlay.frame': (params) => {
+          const p = params as OverlayFrameParams
+          frames.push(p)
+          if (p.requestId !== undefined && p.requestId !== latestRequest) {
+            return { accepted: false, reason: 'overlays.superseded' }
+          }
+          return { accepted: true }
+        }
+      }
+    })
+    return { ...r, calls, overlays, frames, setLatest: (id: string) => (latestRequest = id) }
+  }
+
+  // Node has no ImageBitmap; an ArrayBuffer stands in as the transferable image.
+  const fakeImage = (bytes: number[]) =>
+    new Uint8Array(bytes).buffer as unknown as ImageBitmap
+
+  const EXTENT: [number, number, number, number] = [-8928500, 2971100, -8921300, 2976050]
+
+  it('advertises the overlays.image capability', async () => {
+    const { client } = await overlaysRig()
+    expect(client.hasCapability('overlays.image')).toBe(true)
+  })
+
+  it('list calls overlay.list and unwraps the overlays', async () => {
+    const { client, calls, overlays } = await overlaysRig()
+    expect(await client.overlays.list()).toEqual(overlays)
+    expect(calls).toEqual([{ method: 'overlay.list', params: undefined }])
+  })
+
+  it('setVisibility and setOpacity send batch params', async () => {
+    const { client, calls } = await overlaysRig()
+    await client.overlays.setVisibility(['depth'], false)
+    await client.overlays.setOpacity(['depth'], 0.5)
+    expect(calls).toEqual([
+      { method: 'overlay.setVisibility', params: { ids: ['depth'], visible: false } },
+      { method: 'overlay.setOpacity', params: { ids: ['depth'], opacity: 0.5 } }
+    ])
+  })
+
+  it('frame transfers the image to the host', async () => {
+    const { client, frames } = await overlaysRig()
+    const image = fakeImage([1, 2, 3, 4])
+    const res = await client.overlays.frame({ overlayId: 'depth', requestId: 'r-2', extent: EXTENT, image })
+    expect(res).toEqual({ accepted: true })
+    expect((image as unknown as ArrayBuffer).byteLength).toBe(0) // the runtime no longer owns it
+    expect([...new Uint8Array(frames[0].image as unknown as ArrayBuffer)]).toEqual([1, 2, 3, 4])
+    expect(frames[0].extent).toEqual(EXTENT)
+  })
+
+  it('a frame for a superseded request is refused as a result, not an error', async () => {
+    const { client, setLatest } = await overlaysRig()
+    setLatest('r-3')
+    const res = await client.overlays.frame({ overlayId: 'depth', requestId: 'r-2', extent: EXTENT, image: fakeImage([0]) })
+    expect(res).toEqual({ accepted: false, reason: 'overlays.superseded' })
+  })
+
+  it('a live frame omits requestId', async () => {
+    const { client, frames } = await overlaysRig()
+    await client.overlays.frame({ overlayId: 'depth', extent: EXTENT, image: fakeImage([7]) })
+    expect('requestId' in frames[0]).toBe(false)
+  })
+
+  it('the generic call path works with an explicit transfer list', async () => {
+    const { client } = await overlaysRig()
+    const image = fakeImage([5, 6])
+    const res = await client.call(
+      'overlay.frame',
+      { overlayId: 'depth', requestId: 'r-2', extent: EXTENT, image },
+      { transfer: [image as unknown as Transferable] }
+    )
+    expect(res).toEqual({ accepted: true })
+    expect((image as unknown as ArrayBuffer).byteLength).toBe(0)
+  })
+
+  it('delivers overlay.request and overlay.state to a subscribed runtime', async () => {
+    const { client, host } = await overlaysRig()
+    const requests: OverlayRequestEvent[] = []
+    const states: OverlayStateEvent[] = []
+    await client.subscribe(['overlay.request'], (_n, p) => requests.push(p as OverlayRequestEvent))
+    await client.subscribe(['overlay.state'], (_n, p) => states.push(p as OverlayStateEvent))
+    const req: OverlayRequestEvent = {
+      overlayId: 'depth', requestId: 'r-9', extent: EXTENT,
+      bounds: [-80.205, 25.771, -80.14, 25.811], width: 1600, height: 1100,
+      pixelRatio: 1, resolution: 4.5, zoom: 15.2, rotation: 0
+    }
+    const hidden: OverlayStateEvent = { overlayId: 'depth', visible: false, opacity: 0.85, suspended: false }
+    expect(host.publish('overlay.request', req)).toBe(true)
+    expect(host.publish('overlay.state', hidden)).toBe(true)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(requests).toEqual([req])
+    expect(states).toEqual([hidden])
+  })
+
+  it('does not deliver overlay.request without a subscription', async () => {
+    const { host } = await overlaysRig()
+    expect(host.publish('overlay.request', { overlayId: 'depth' })).toBe(false)
+  })
+
+  it('a host without the capability rejects with overlays.notSupported', async () => {
+    const { client } = await overlaysRig(false)
+    expect(client.hasCapability('overlays.image')).toBe(false)
+    await expect(client.overlays.list()).rejects.toHaveProperty('reason', 'overlays.notSupported')
   })
 })

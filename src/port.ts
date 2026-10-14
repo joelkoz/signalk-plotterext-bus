@@ -4,7 +4,11 @@
  * and an iframe, a MessageChannel port, or a test double.
  */
 export interface BusPort {
-  post(data: unknown): void
+  /**
+   * Send `data`. `transfer` lists objects (an `ImageBitmap`, an `ArrayBuffer`)
+   * to move rather than copy; after the post the sender no longer owns them.
+   */
+  post(data: unknown, transfer?: Transferable[]): void
   /** Register a receive handler; returns an unlisten function. */
   listen(handler: (data: unknown) => void): () => void
 }
@@ -31,8 +35,12 @@ export function windowPort(peer: Window, opts: WindowPortOptions = {}): BusPort 
     opts.listenWindow ?? (globalThis as unknown as Window)
   const origin = opts.origin ?? listenWindow.location?.origin ?? '*'
   return {
-    post(data) {
-      peer.postMessage(data, origin)
+    post(data, transfer) {
+      if (transfer?.length) {
+        peer.postMessage(data, { targetOrigin: origin, transfer })
+      } else {
+        peer.postMessage(data, origin)
+      }
     },
     listen(handler) {
       const fn = (ev: MessageEvent) => {
@@ -48,7 +56,7 @@ export function windowPort(peer: Window, opts: WindowPortOptions = {}): BusPort 
 }
 
 interface MessagePortLike {
-  postMessage(data: unknown): void
+  postMessage(data: unknown, transfer?: Transferable[]): void
   addEventListener(type: 'message', fn: (ev: { data: unknown }) => void): void
   removeEventListener(
     type: 'message',
@@ -60,8 +68,12 @@ interface MessagePortLike {
 /** A port over a MessageChannel/MessagePort (browser or Node). */
 export function messagePort(port: MessagePortLike): BusPort {
   return {
-    post(data) {
-      port.postMessage(data)
+    post(data, transfer) {
+      if (transfer?.length) {
+        port.postMessage(data, transfer)
+      } else {
+        port.postMessage(data)
+      }
     },
     listen(handler) {
       const fn = (ev: { data: unknown }) => handler(ev.data)

@@ -134,6 +134,22 @@ specification (proposed to `SignalK/signalk-server` under
   `window.closed` (`WindowClosedEvent`). Failures reject with a stable
   `error.data.reason` from `WindowErrorReason`. Authoritative method/event
   contract lives in the Plotter Extensions API spec ("Windows").
+- `overlays.*` (capability `overlays.image`): typed wrappers over the host's
+  image map overlays, used from a background runtime. Surface:
+  `overlays.list()` → `OverlayInfo[]` (`{ id, title, band, visible, opacity,
+  suspended }`, over `overlay.list`), `overlays.setVisibility(ids, visible)`,
+  `overlays.setOpacity(ids, opacity)`, and `overlays.frame(params)` →
+  `OverlayFrameResult` (`{ accepted, reason? }`, over `overlay.frame`), which
+  puts `params.image` in the transfer list. The host asks for frames with
+  `overlay.request` (`OverlayRequestEvent`) and reports visibility with
+  `overlay.state` (`OverlayStateEvent`). Failures reject with a stable
+  `error.data.reason` from `OverlayErrorReason`; refused frames resolve with an
+  `OverlayFrameRefusal`. Authoritative method/event contract lives in the
+  Plotter Extensions API spec ("Map overlays").
+- Transfer lists: `BusPort.post(data, transfer?)`, `BusEndpoint.call(…, {
+  transfer })`, `BusEndpoint.notify(…, { transfer })` and `client.call(…, {
+  transfer })` pass a transfer list through to `postMessage`; with none (or an
+  empty one) the message is posted exactly as before.
 - `panels.*` (capability `panels.state`): a typed wrapper over the host's panel
   visibility reports. Surface: `panels.list()` → `PanelState[]` (`{ panel,
   visible, collapsed, targetInstance? }`), over `ui.listPanels`. Changes are
@@ -239,6 +255,16 @@ Must stay covered (vitest, Node, no DOM):
   window by id, a left-out `windowId` goes on the wire as `{}` (self),
   `window.closed` delivery, `UNKNOWN_PANEL` / `windows.unknownId` reason
   propagation, generic `call()` path.
+- Transfer conformance: a buffer in a call's or notification's transfer list
+  arrives intact at the peer and is detached on the sender; without a transfer
+  list it is copied, not detached.
+- `overlays.*` helper conformance: `overlays.image` capability advertised,
+  `list` unwraps `overlays`, `setVisibility` / `setOpacity` send batch params,
+  `frame` transfers `image` (detached on the sender, intact at the host), a
+  superseded frame resolves `{ accepted: false, reason }` rather than
+  rejecting, a live frame omits `requestId`, the generic `call()` path with an
+  explicit transfer list, `overlay.request` / `overlay.state` delivered only to
+  a subscribed context, `overlays.notSupported` reason propagation.
 - `panels.*` helper conformance: `panels.state` capability advertised, `list`
   calls `ui.listPanels` and unwraps `panels`, generic `call()` path returns the
   raw result, `panel.state` delivered only to a subscribed context,

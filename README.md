@@ -29,6 +29,13 @@ Every message is a JSON-RPC 2.0 object inside a routing envelope, sent with
 The `bus` field identifies protocol and major version so frames can ignore
 unrelated `postMessage` traffic.
 
+Every message is plain JSON, with **one exception**: the params of
+`overlay.frame` carry an `ImageBitmap` in `image`, and the sender lists it in
+the `postMessage` **transfer list** (`postMessage(envelope, { targetOrigin,
+transfer: [image] })` on a window, `port.postMessage(envelope, [image])` on a
+`MessagePort`), so the frame is moved rather than copied. A receiver must accept
+that one non-JSON value in that one place; everything else stays JSON.
+
 ### Calls
 
 A call is a JSON-RPC request with a fresh per-call correlation `id` (never
@@ -192,6 +199,22 @@ A failing window method (`ui.openWindow`, `ui.updateWindow`, `ui.focusWindow`,
 `PanelErrorReason` string `panels.notSupported` when the host does not
 implement panel state.
 
+### Overlay error reasons
+
+A failing `overlay.*` host method rejects with a JSON-RPC error whose
+`error.data.reason` is an `OverlayErrorReason` string:
+
+| Reason | Meaning |
+|---|---|
+| `overlays.unknownId` | An id names no overlay of the caller's extension. |
+| `overlays.badRequest` | Missing or invalid params — e.g. an `image` that is not an `ImageBitmap`, or a size that does not match its request. |
+| `overlays.notSupported` | The host does not implement `overlays.image`. |
+
+A **refused frame is a result, not an error**: `overlay.frame` resolves with
+`{ accepted: false, reason }`, where `reason` is an `OverlayFrameRefusal` —
+`overlays.superseded` (a newer request replaced the one it answers) or
+`overlays.throttled` (the host dropped a live frame to keep its pace).
+
 ### Publish error reasons
 
 `events.publish` rejects with a JSON-RPC error whose `error.data.reason` is the
@@ -307,6 +330,28 @@ if (client.hasCapability('panels.state')) {
   })
   const mine = (await client.panels.list()).find((p) => p.panel === self)
   if (mine && !mine.visible) pause()
+}
+
+// Image map overlay (capability `overlays.image`) — in a background runtime.
+// The host asks for frames; answer each with one transferred ImageBitmap,
+// keeping one frame in flight. Draw north-up in Web Mercator (see the spec).
+if (client.hasCapability('overlays.image')) {
+  let latest = null, busy = false
+  const draw = async () => {
+    if (busy || !latest) return
+    busy = true
+    const req = latest
+    const image = await render(req) // e.g. a Worker: OffscreenCanvas.transferToImageBitmap()
+    const res = await client.overlays.frame({
+      overlayId: req.overlayId, requestId: req.requestId, extent: req.extent, image
+    })
+    busy = false
+    if (!res.accepted || latest !== req) draw()
+  }
+  await client.subscribe(['overlay.request'], (_name, req) => { latest = req; draw() })
+  await client.subscribe(['overlay.state'], (_name, s) => {
+    if (!s.visible || s.suspended) releaseGpu()
+  })
 }
 
 // Chart viewport (capability `map`) — follow where the user is looking instead

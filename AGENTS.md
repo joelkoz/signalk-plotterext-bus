@@ -55,7 +55,9 @@ npm test          # vitest run
 - **Zero runtime dependencies.** The package must remain trivially auditable
   and bundleable into extension iframes. Dev dependencies only.
 - **Plain JSON on the wire.** No class instances, no functions, nothing that
-  fails structured clone or JSON round-trips. Errors cross the wire as
+  fails structured clone or JSON round-trips. The single, deliberate exception
+  is `overlay.frame`'s `image` (an `ImageBitmap` moved via the `postMessage`
+  transfer list); do not add others without a spec change. Errors cross the wire as
   JSON-RPC error objects, never as serialized exceptions.
 - **Correlate responses by per-call nonce, never by method name** —
   concurrent calls to the same method must not collide.
