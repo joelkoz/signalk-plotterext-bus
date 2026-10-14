@@ -1699,6 +1699,35 @@ describe('overlay helpers', () => {
     expect(states).toEqual([hidden])
   })
 
+  it('carries the host live-frame pace in overlay.request', async () => {
+    const { client, host } = await overlaysRig()
+    const seen: OverlayRequestEvent[] = []
+    await client.subscribe(['overlay.request'], (_n, p) => seen.push(p as OverlayRequestEvent))
+    const req: OverlayRequestEvent = {
+      overlayId: 'depth', requestId: 'r-1', extent: EXTENT,
+      bounds: [-80.205, 25.771, -80.14, 25.811], width: 100, height: 50,
+      pixelRatio: 2, resolution: 5, zoom: 15, rotation: 0, liveInterval: 200
+    }
+    host.publish('overlay.request', req)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(seen[0].liveInterval).toBe(200)
+  })
+
+  it('tells an overlay configuration panel which overlay it configures', async () => {
+    const { client } = await rig({
+      context: {
+        kind: 'panel',
+        id: 'depth-settings',
+        instanceId: null,
+        targetInstance: null,
+        targetWidget: null,
+        targetOverlay: 'depth'
+      }
+    })
+    expect(client.context.targetOverlay).toBe('depth')
+    expect(client.context.targetInstance).toBeNull()
+  })
+
   it('does not deliver overlay.request without a subscription', async () => {
     const { host } = await overlaysRig()
     expect(host.publish('overlay.request', { overlayId: 'depth' })).toBe(false)
