@@ -151,7 +151,7 @@ export interface HandshakeContext {
   targetInstance?: string | null
   /** Manifest-local widget id of the target instance (configuration panels). */
   targetWidget?: string | null
-  /** Image overlay a configuration panel was opened for (capability `overlays.image`). */
+  /** Overlay a configuration panel was opened for (capability `overlays.image` or `overlays.data`). */
   targetOverlay?: string | null
   /** Host-assigned id of this window (`window` contexts; capability `windows`). */
   windowId?: string
@@ -715,17 +715,40 @@ export type WindowErrorReason =
 /** Where an overlay sits relative to the host's own content. */
 export type OverlayBand = 'aboveCharts' | 'aboveResources'
 
+/**
+ * The kind of overlay: `image` (capability `overlays.image`, the extension
+ * draws the pixels) or `data` (capability `overlays.data`, the host draws data
+ * and a MapLibre style the extension supplies).
+ */
+export type OverlayType = 'image' | 'data'
+
+/** Why a host skipped a data-overlay layer it could not draw exactly. */
+export type SkippedLayerReason = 'layerType' | 'property' | 'source'
+
+/** A data-overlay layer the host does not draw — an entry of `OverlayInfo.skippedLayers`. */
+export interface SkippedLayer {
+  /** The layer's id in the overlay's style. */
+  id: string
+  reason: SkippedLayerReason
+  /** Free text for a person reading a log, e.g. the layer type or property. */
+  detail?: string
+}
+
 /** An overlay's current state — an entry of `overlay.list`. */
 export interface OverlayInfo {
   /** The overlay's manifest id. */
   id: string
   title: string
+  /** Absent from hosts that predate `overlays.data`; read it as `image`. */
+  type?: OverlayType
   band: OverlayBand
   visible: boolean
   /** 0..1 */
   opacity: number
   /** The host has paused the overlay to stay within its budget. */
   suspended: boolean
+  /** Data overlays only: the style's layers the host does not draw. Empty when it draws them all. */
+  skippedLayers?: SkippedLayer[]
 }
 
 /** Result of `overlay.list` — the caller's extension's overlays. */
@@ -791,10 +814,88 @@ export interface OverlayStateEvent {
   suspended: boolean
 }
 
-/** Stable `error.data.reason` strings for `overlay.*` host-method failures. */
+/**
+ * Types for the `overlays.data` capability — map layers the host draws from
+ * data and a MapLibre style (version 8) the extension supplies. The style and
+ * its GeoJSON travel as plain JSON and are typed loosely here; the bus does not
+ * validate them. See the Plotter Extensions API spec, "Data overlays".
+ */
+
+/** A MapLibre style document as a data overlay uses it. The host reads `version`, `state`, `sources` and `layers`. */
+export interface OverlayStyle {
+  version: 8
+  /** Runtime variables read with `["global-state", name]`, and their defaults. */
+  state?: Record<string, { default: unknown }>
+  sources: Record<string, Record<string, unknown>>
+  layers: Record<string, unknown>[]
+  [key: string]: unknown
+}
+
+/** A tile to fetch again: `[z, x, y]`, as substituted into the source's `tiles` template (XYZ scheme). */
+export type OverlayTileId = [number, number, number]
+
+/** Params of `overlay.refresh` — fetch some or all of a source's data again. */
+export interface OverlayRefreshParams {
+  overlayId: string
+  /** The source's id in the overlay's style. */
+  source: string
+  /** Only these tiles; omit to fetch the whole source again. */
+  tiles?: OverlayTileId[]
+}
+
+/** A GeoJSON feature as `overlay.setData` carries it. `upsert` features must have `id`. */
+export interface OverlayFeature {
+  type: 'Feature'
+  id?: string | number
+  geometry: Record<string, unknown> | null
+  properties?: Record<string, unknown> | null
+}
+
+/**
+ * Params of `overlay.setData` for a `geojson` source: either `data`, which
+ * replaces every feature, or `upsert` / `remove`, which change features by
+ * `id`. `data` cannot be combined with `upsert` or `remove`.
+ */
+export interface OverlaySetDataParams {
+  overlayId: string
+  source: string
+  /** A GeoJSON object (usually a FeatureCollection) replacing the source's data. */
+  data?: Record<string, unknown>
+  /** Features added, or replacing the feature with the same `id`. */
+  upsert?: OverlayFeature[]
+  /** Ids of features to remove. */
+  remove?: (string | number)[]
+}
+
+/**
+ * Params of `overlay.setLayer` — change one layer of a data overlay. Each named
+ * paint or layout property is replaced; `null` restores what the style
+ * declared. `filter` replaces the filter; `filter: null` removes it.
+ */
+export interface OverlaySetLayerParams {
+  overlayId: string
+  /** The layer's id in the overlay's style. */
+  layer: string
+  paint?: Record<string, unknown>
+  layout?: Record<string, unknown>
+  filter?: unknown[] | null
+}
+
+/** Params of `overlay.setState` — set `global-state` variables; `null` restores a variable's default. */
+export interface OverlaySetStateParams {
+  overlayId: string
+  values: Record<string, unknown>
+}
+
+/**
+ * Stable `error.data.reason` strings for `overlay.*` host-method failures.
+ * `overlays.unsupported` refuses a data-overlay change the host cannot draw;
+ * the layer stays as it was.
+ */
 export type OverlayErrorReason =
   | 'overlays.unknownId'
   | 'overlays.badRequest'
+  | 'overlays.unsupported'
   | 'overlays.notSupported'
 
 /**
@@ -815,7 +916,7 @@ export interface PanelState {
   collapsed: boolean
   /** Configuration panels opened for a widget instance: the instance being configured. */
   targetInstance?: string
-  /** Configuration panels opened for an image overlay: the overlay being configured. */
+  /** Configuration panels opened for an overlay: the overlay being configured. */
   targetOverlay?: string
 }
 

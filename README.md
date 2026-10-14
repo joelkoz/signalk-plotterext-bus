@@ -207,8 +207,9 @@ A failing `overlay.*` host method rejects with a JSON-RPC error whose
 | Reason | Meaning |
 |---|---|
 | `overlays.unknownId` | An id names no overlay of the caller's extension. |
-| `overlays.badRequest` | Missing or invalid params — e.g. an `image` that is not an `ImageBitmap`, or a size that does not match its request. |
-| `overlays.notSupported` | The host does not implement `overlays.image`. |
+| `overlays.badRequest` | Missing or invalid params — e.g. an `image` that is not an `ImageBitmap`, a size that does not match its request, a method used on the wrong kind of overlay, or a source or layer id the overlay's style does not have. |
+| `overlays.unsupported` | A data-overlay change the host cannot draw (`overlay.setLayer`); the layer stays as it was. |
+| `overlays.notSupported` | The host does not implement the capability for the overlay's kind (`overlays.image` or `overlays.data`). |
 
 A **refused frame is a result, not an error**: `overlay.frame` resolves with
 `{ accepted: false, reason }`, where `reason` is an `OverlayFrameRefusal` —
@@ -352,6 +353,21 @@ if (client.hasCapability('overlays.image')) {
   await client.subscribe(['overlay.state'], (_name, s) => {
     if (!s.visible || s.suspended) releaseGpu()
   })
+}
+
+// Data map overlay (capability `overlays.data`) — the host draws the layer from
+// the style and tiles the manifest names; any context changes it while shown.
+if (client.hasCapability('overlays.data')) {
+  // a ramp that follows the draft: literal stops, rebuilt and re-sent
+  await client.overlays.setLayer({
+    overlayId: 'depth', layer: 'shading',
+    paint: { 'color-relief-color': rampFor(draft) }
+  })
+  await client.overlays.setState('depth', { unitFactor: 3.28084 }) // global-state
+  await client.overlays.refresh({ overlayId: 'depth', source: 'depth', tiles: [[16, 18129, 28465]] })
+  await client.overlays.setData({ overlayId: 'depth', source: 'soundings', upsert: [feature] })
+  const [depth] = await client.overlays.list()
+  if (depth.skippedLayers?.length) console.warn('host skipped', depth.skippedLayers)
 }
 
 // Chart viewport (capability `map`) — follow where the user is looking instead

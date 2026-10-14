@@ -12,6 +12,10 @@ import {
   OverlayFrameResult,
   OverlayInfo,
   OverlayListResult,
+  OverlayRefreshParams,
+  OverlaySetDataParams,
+  OverlaySetLayerParams,
+  OverlaySetStateParams,
   PanelListResult,
   PanelState,
   PublishScope,
@@ -336,14 +340,21 @@ export class ExtensionClient {
   }
 
   /**
-   * Image map overlays (capability `overlays.image`): map layers this
-   * extension's background runtime draws. The host asks for frames with the
-   * `overlay.request` event (`OverlayRequestEvent`) and reports visibility
-   * with `overlay.state` (`OverlayStateEvent`); the runtime answers each
+   * Map overlays. `list()`, `setVisibility()` and `setOpacity()` apply to both
+   * kinds, and the host reports visibility with `overlay.state`
+   * (`OverlayStateEvent`).
+   *
+   * Image overlays (capability `overlays.image`): map layers this extension's
+   * background runtime draws. The host asks for frames with the
+   * `overlay.request` event (`OverlayRequestEvent`); the runtime answers each
    * request with `frame()`, keeping one frame in flight. `frame()` transfers
    * `image`, so the caller no longer owns it afterwards. A plain-JS extension
    * can call `client.call('overlay.frame', params, { transfer: [image] })`
    * with no behavioural difference.
+   *
+   * Data overlays (capability `overlays.data`): map layers the host draws from
+   * the extension's data and MapLibre style. `refresh()`, `setData()`,
+   * `setLayer()` and `setState()` change one while it is shown.
    */
   readonly overlays = {
     list: async (): Promise<OverlayInfo[]> => {
@@ -360,6 +371,18 @@ export class ExtensionClient {
       return (await this.call('overlay.frame', params, {
         transfer: [params.image]
       })) as OverlayFrameResult
+    },
+    refresh: async (params: OverlayRefreshParams): Promise<void> => {
+      await this.call('overlay.refresh', params)
+    },
+    setData: async (params: OverlaySetDataParams): Promise<void> => {
+      await this.call('overlay.setData', params)
+    },
+    setLayer: async (params: OverlaySetLayerParams): Promise<void> => {
+      await this.call('overlay.setLayer', params)
+    },
+    setState: async (overlayId: string, values: Record<string, unknown>): Promise<void> => {
+      await this.call('overlay.setState', { overlayId, values } satisfies OverlaySetStateParams)
     }
   }
 

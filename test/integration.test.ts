@@ -14,7 +14,11 @@ import {
   NightModeChangedEvent,
   OverlayFrameParams,
   OverlayInfo,
+  OverlayRefreshParams,
   OverlayRequestEvent,
+  OverlaySetDataParams,
+  OverlaySetLayerParams,
+  OverlayStyle,
   OverlayStateEvent,
   PanelState,
   PanelStateEvent,
@@ -1737,5 +1741,172 @@ describe('overlay helpers', () => {
     const { client } = await overlaysRig(false)
     expect(client.hasCapability('overlays.image')).toBe(false)
     await expect(client.overlays.list()).rejects.toHaveProperty('reason', 'overlays.notSupported')
+  })
+})
+
+describe('data overlay helpers', () => {
+  // A tiny in-memory host mirroring the `overlays.data` capability: it records
+  // every call, keeps one data overlay with a skipped layer, and enforces the
+  // spec's setData / setLayer rules.
+  const STYLE: OverlayStyle = {
+    version: 8,
+    state: { unitFactor: { default: 1 } },
+    sources: {
+      depth: { type: 'raster-dem', tiles: ['/plotterext/p/dem/{z}/{x}/{y}.png'], encoding: 'terrarium', tileSize: 256 },
+      soundings: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } }
+    },
+    layers: [
+      { id: 'shading', type: 'color-relief', source: 'depth' },
+      { id: 'relief', type: 'hillshade', source: 'depth' },
+      { id: 'labels', type: 'symbol', source: 'soundings' }
+    ]
+  }
+
+  async function dataRig(capable = true) {
+    const calls: { method: string; params: unknown }[] = []
+    const overlays: OverlayInfo[] = [
+      {
+        id: 'depth', title: 'Live depth', type: 'data', band: 'aboveCharts',
+        visible: true, opacity: 0.85, suspended: false,
+        skippedLayers: [{ id: 'relief', reason: 'layerType', detail: 'hillshade' }]
+      }
+    ]
+    const sources = STYLE.sources
+    const layers = new Set(STYLE.layers.map((l) => l.id as string))
+    const fail = (reason: string) => {
+      throw new RpcError(reason, { reason })
+    }
+    const own = (p: { overlayId?: string }) => {
+      if (!capable) fail('overlays.notSupported')
+      if (p.overlayId !== 'depth') fail('overlays.unknownId')
+    }
+    const r = await rig({
+      hostInfo: {
+        ...HOST_INFO,
+        capabilities: capable ? [...HOST_INFO.capabilities, 'overlays.data'] : HOST_INFO.capabilities
+      },
+      context: { kind: 'background', id: 'live', instanceId: null },
+      methods: {
+        'overlay.list': () => ({ overlays }),
+        'overlay.refresh': (params) => {
+          const p = params as OverlayRefreshParams
+          own(p)
+          if (!(p.source in sources)) fail('overlays.badRequest')
+          calls.push({ method: 'overlay.refresh', params })
+          return {}
+        },
+        'overlay.setData': (params) => {
+          const p = params as OverlaySetDataParams
+          own(p)
+          if (sources[p.source]?.type !== 'geojson') fail('overlays.badRequest')
+          if (p.data !== undefined && (p.upsert !== undefined || p.remove !== undefined)) fail('overlays.badRequest')
+          if (p.upsert?.some((f) => f.id === undefined)) fail('overlays.badRequest')
+          calls.push({ method: 'overlay.setData', params })
+          return {}
+        },
+        'overlay.setLayer': (params) => {
+          const p = params as OverlaySetLayerParams
+          own(p)
+          if (!layers.has(p.layer)) fail('overlays.badRequest')
+          if (p.paint && 'color-relief-color' in p.paint && (p.paint['color-relief-color'] as unknown[])[0] === 'step') {
+            fail('overlays.unsupported')
+          }
+          calls.push({ method: 'overlay.setLayer', params })
+          return {}
+        },
+        'overlay.setState': (params) => {
+          own(params as { overlayId: string })
+          calls.push({ method: 'overlay.setState', params })
+          return {}
+        }
+      }
+    })
+    return { ...r, calls }
+  }
+
+  const RAMP = ['interpolate', ['linear'], ['elevation'], -32768, 'rgba(0,0,0,0)', -201, 'rgba(0,0,0,0)', -200, '#9cc8ec', 0, '#f2f8fc']
+
+  it('advertises the overlays.data capability', async () => {
+    const { client } = await dataRig()
+    expect(client.hasCapability('overlays.data')).toBe(true)
+  })
+
+  it('lists the overlay kind and the layers the host skipped', async () => {
+    const { client } = await dataRig()
+    const [depth] = await client.overlays.list()
+    expect(depth.type).toBe('data')
+    expect(depth.skippedLayers).toEqual([{ id: 'relief', reason: 'layerType', detail: 'hillshade' }])
+  })
+
+  it('refresh sends named tiles, or none for the whole source', async () => {
+    const { client, calls } = await dataRig()
+    await client.overlays.refresh({ overlayId: 'depth', source: 'depth', tiles: [[16, 18129, 28465], [15, 9064, 14232]] })
+    await client.overlays.refresh({ overlayId: 'depth', source: 'soundings' })
+    expect(calls).toEqual([
+      { method: 'overlay.refresh', params: { overlayId: 'depth', source: 'depth', tiles: [[16, 18129, 28465], [15, 9064, 14232]] } },
+      { method: 'overlay.refresh', params: { overlayId: 'depth', source: 'soundings' } }
+    ])
+  })
+
+  it('setData replaces a geojson source, or upserts and removes by id', async () => {
+    const { client, calls } = await dataRig()
+    const point = { type: 'Feature' as const, id: 7, geometry: { type: 'Point', coordinates: [-80.19, 25.77] }, properties: { depth: 1.8 } }
+    await client.overlays.setData({ overlayId: 'depth', source: 'soundings', data: { type: 'FeatureCollection', features: [point] } })
+    await client.overlays.setData({ overlayId: 'depth', source: 'soundings', upsert: [point], remove: [3] })
+    expect(calls.map((c) => c.params)).toEqual([
+      { overlayId: 'depth', source: 'soundings', data: { type: 'FeatureCollection', features: [point] } },
+      { overlayId: 'depth', source: 'soundings', upsert: [point], remove: [3] }
+    ])
+  })
+
+  it('setData is a bad request on a non-geojson source, with data plus upsert, or an upsert without ids', async () => {
+    const { client } = await dataRig()
+    const fc = { type: 'FeatureCollection', features: [] }
+    const noId = { type: 'Feature' as const, geometry: null, properties: {} }
+    await expect(client.overlays.setData({ overlayId: 'depth', source: 'depth', data: fc })).rejects.toHaveProperty('reason', 'overlays.badRequest')
+    await expect(client.overlays.setData({ overlayId: 'depth', source: 'soundings', data: fc, remove: [1] })).rejects.toHaveProperty('reason', 'overlays.badRequest')
+    await expect(client.overlays.setData({ overlayId: 'depth', source: 'soundings', upsert: [noId] })).rejects.toHaveProperty('reason', 'overlays.badRequest')
+  })
+
+  it('setLayer sends paint, layout and filter changes, with null resets', async () => {
+    const { client, calls } = await dataRig()
+    await client.overlays.setLayer({ overlayId: 'depth', layer: 'shading', paint: { 'color-relief-color': RAMP } })
+    await client.overlays.setLayer({ overlayId: 'depth', layer: 'labels', layout: { visibility: 'none' }, paint: { 'text-color': null }, filter: null })
+    expect(calls.map((c) => c.params)).toEqual([
+      { overlayId: 'depth', layer: 'shading', paint: { 'color-relief-color': RAMP } },
+      { overlayId: 'depth', layer: 'labels', layout: { visibility: 'none' }, paint: { 'text-color': null }, filter: null }
+    ])
+  })
+
+  it('a change the host cannot draw is refused as overlays.unsupported', async () => {
+    const { client } = await dataRig()
+    const step = ['step', ['elevation'], 'red', -2, 'blue']
+    await expect(
+      client.overlays.setLayer({ overlayId: 'depth', layer: 'shading', paint: { 'color-relief-color': step } })
+    ).rejects.toHaveProperty('reason', 'overlays.unsupported')
+  })
+
+  it('setLayer on a layer the style lacks is a bad request', async () => {
+    const { client } = await dataRig()
+    await expect(client.overlays.setLayer({ overlayId: 'depth', layer: 'nope', paint: {} })).rejects.toHaveProperty('reason', 'overlays.badRequest')
+  })
+
+  it('setState sends global-state values, null restoring a default', async () => {
+    const { client, calls } = await dataRig()
+    await client.overlays.setState('depth', { unitFactor: 3.28084, safetyDepth: null })
+    expect(calls).toEqual([
+      { method: 'overlay.setState', params: { overlayId: 'depth', values: { unitFactor: 3.28084, safetyDepth: null } } }
+    ])
+  })
+
+  it('another extension\'s overlay id is overlays.unknownId', async () => {
+    const { client } = await dataRig()
+    await expect(client.overlays.setState('theirs', { a: 1 })).rejects.toHaveProperty('reason', 'overlays.unknownId')
+  })
+
+  it('a host without the capability rejects with overlays.notSupported', async () => {
+    const { client } = await dataRig(false)
+    expect(client.hasCapability('overlays.data')).toBe(false)
+    await expect(client.overlays.refresh({ overlayId: 'depth', source: 'depth' })).rejects.toHaveProperty('reason', 'overlays.notSupported')
   })
 })

@@ -148,6 +148,18 @@ specification (proposed to `SignalK/signalk-server` under
   the host's live-frame pace; an overlay configuration panel's handshake context
   carries `targetOverlay` (also on `PanelState`). Authoritative method/event contract lives in the
   Plotter Extensions API spec ("Map overlays").
+- `overlays.*` data-overlay wrappers (capability `overlays.data`): map layers
+  the host draws from the extension's data and MapLibre style. Surface:
+  `overlays.refresh(params)` (`OverlayRefreshParams`, over `overlay.refresh`),
+  `overlays.setData(params)` (`OverlaySetDataParams`, over `overlay.setData`),
+  `overlays.setLayer(params)` (`OverlaySetLayerParams`, over
+  `overlay.setLayer`) and `overlays.setState(overlayId, values)` (over
+  `overlay.setState`), each resolving to `void`. `OverlayInfo` gains optional
+  `type` (`OverlayType`, absent from older hosts = `image`) and
+  `skippedLayers` (`SkippedLayer[]`). The style (`OverlayStyle`) and GeoJSON
+  are plain JSON, typed loosely and not validated by the bus. Failures reject
+  with an `OverlayErrorReason`, which adds `overlays.unsupported`.
+  Authoritative contract: the Plotter Extensions API spec ("Data overlays").
 - Transfer lists: `BusPort.post(data, transfer?)`, `BusEndpoint.call(…, {
   transfer })`, `BusEndpoint.notify(…, { transfer })` and `client.call(…, {
   transfer })` pass a transfer list through to `postMessage`; with none (or an
@@ -267,6 +279,12 @@ Must stay covered (vitest, Node, no DOM):
   rejecting, a live frame omits `requestId`, the generic `call()` path with an
   explicit transfer list, `overlay.request` / `overlay.state` delivered only to
   a subscribed context, `overlays.notSupported` reason propagation.
+- Data-overlay helper conformance: `overlays.data` capability advertised,
+  `list` carries `type` and `skippedLayers`, `refresh` with and without
+  `tiles`, `setData` replace and upsert/remove params, `setLayer` paint /
+  layout / filter params with `null` resets, `setState` params, and reason
+  propagation for `overlays.badRequest`, `overlays.unsupported`,
+  `overlays.unknownId` and `overlays.notSupported`.
 - `panels.*` helper conformance: `panels.state` capability advertised, `list`
   calls `ui.listPanels` and unwraps `panels`, generic `call()` path returns the
   raw result, `panel.state` delivered only to a subscribed context,

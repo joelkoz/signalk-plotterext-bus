@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.21.0
+
+Data map overlays. A new capability, `overlays.data`, lets an extension supply
+map data and a MapLibre style that the host draws with its own map stack.
+Everything is additive; `BUS_ID` stays `plotterExt/1`, and nothing new leaves
+plain JSON.
+
+- **New client helpers** `client.overlays.refresh()`, `setData()`,
+  `setLayer()` and `setState()`, over the new host methods `overlay.refresh`
+  (fetch some or all of a source again), `overlay.setData` (replace, or
+  upsert/remove GeoJSON features by id), `overlay.setLayer` (change one
+  layer's paint, layout or filter) and `overlay.setState` (`global-state`
+  variables).
+- **`OverlayInfo.type`** (`'image' | 'data'`; absent from older hosts, read as
+  `image`) and **`OverlayInfo.skippedLayers`** — the style's layers a host does
+  not draw, each `{ id, reason, detail? }`.
+- **New error reason** `overlays.unsupported` — a data-overlay change the host
+  cannot draw.
+- **New types:** `OverlayType`, `SkippedLayer`, `SkippedLayerReason`,
+  `OverlayStyle`, `OverlayTileId`, `OverlayRefreshParams`, `OverlayFeature`,
+  `OverlaySetDataParams`, `OverlaySetLayerParams`, `OverlaySetStateParams`.
+- `targetOverlay` now applies to configuration panels of either overlay kind.
+- Spec: Plotter Extensions API, "Data overlays".
+
 ## 0.20.0
 
 Image overlay follow-ups. Everything is additive; `BUS_ID` stays
