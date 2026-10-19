@@ -1,8 +1,9 @@
 # Changelog
 
-## 0.22.0
+## 0.23.0
 
-Map actions, map picks and button visibility. Everything is additive;
+Map actions, map picks and button visibility. (Meant for 0.22.0, but 0.22.0
+was published without them; see below.) Everything is additive;
 `BUS_ID` stays `plotterExt/1`, and nothing new leaves plain JSON.
 
 - **Map targets.** `MapTarget` types the thing on the chart an action is
@@ -30,6 +31,21 @@ Map actions, map picks and button visibility. Everything is additive;
   `SetVisibilityParams`.
 - Spec: Plotter Extensions API, "Actions", "Showing and hiding buttons",
   "Picking on the map" and "Interactive overlay features".
+
+## 0.22.0
+
+Typing fix for route points. The wire format is unchanged; `BUS_ID` stays
+`plotterExt/1`. This release does **not** contain the map actions, map picks or
+button visibility types; those are in 0.23.0.
+
+- **`RoutePoint.position`** is now `[number, number] | [number, number, number]`
+  instead of `[number, number, number?]`. Both describe `[lon, lat, alt?]`, but
+  under `strictNullChecks` the optional third element is typed
+  `number | undefined`, so the old tuple would not pass as a plain `number[]`
+  (e.g. OpenLayers coordinates) without a cast.
+- **Narrowing for TypeScript consumers:** a value typed `[number, number,
+  number?]` no longer assigns to `RoutePoint.position`. Type such values as the
+  two-tuple union too. This is why the release is a minor version, not a patch.
 
 ## 0.21.0
 

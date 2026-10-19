@@ -203,7 +203,7 @@ export interface StateChangedEvent {
 
 /** A single point in a route edit buffer (`[lon, lat, alt?]`). */
 export interface RoutePoint {
-  position: [number, number, number?]
+  position: [number, number] | [number, number, number]
   name?: string
   description?: string
   /**
