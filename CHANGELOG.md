@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.22.0
+
+Map actions, map picks and button visibility. Everything is additive;
+`BUS_ID` stays `plotterExt/1`, and nothing new leaves plain JSON.
+
+- **Map targets.** `MapTarget` types the thing on the chart an action is
+  chosen on or a pick yields: a union over `kind` (`TargetKind`: `position`,
+  `waypoint`, `note`, `route`, `track`, `region`, `vessel`, `aton`,
+  `chartFeature`, `overlayFeature`), each with the selected `position`,
+  `name?` and `featurePosition?`. `TargetEntry` and `TargetMatchCondition` type
+  a `targets` list.
+- **Actions** (capability `actions`; `actions.overlay` for data-overlay
+  features). A choice arrives as the `action.invoked` event
+  (`ActionInvokedEvent`) or, for a panel or window the action loaded, as the new
+  `HandshakeContext.invocation` (`ActionInvocation`). New client helper
+  `client.actions.setVisibility(ids, visible)` over `actions.setVisibility`.
+- **Button visibility** (capability `buttons.visibility`). New client helper
+  `client.buttons.setVisibility(ids, visible)` over `buttons.setVisibility`.
+- **Map picks** (capability `map.pick`). New client helpers
+  `client.map.pick(params?)` and `client.map.cancelPick(pickId)`; the answer is
+  the `map.picked` event (`MapPickedEvent`, `PickCancelReason`).
+- **New error reasons:** `ActionErrorReason`, `ButtonErrorReason` and
+  `MapErrorReason` (`map.badRequest`, `map.pickBusy`, `map.notSupported`).
+- **New types:** `TargetKind`, `TargetBase`, `PositionTarget`, `StoredTarget`,
+  `RouteTarget`, `VesselTarget`, `AtonTarget`, `ChartFeatureTarget`,
+  `OverlayFeatureTarget`, `MapTarget`, `TargetMatchCondition`, `TargetEntry`,
+  `MapPickParams`, `MapPickResult`, `MapCancelPickParams`, `ActionInvocation`,
+  `SetVisibilityParams`.
+- Spec: Plotter Extensions API, "Actions", "Showing and hiding buttons",
+  "Picking on the map" and "Interactive overlay features".
+
 ## 0.21.0
 
 Data map overlays. A new capability, `overlays.data`, lets an extension supply

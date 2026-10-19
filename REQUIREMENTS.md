@@ -181,6 +181,32 @@ specification (proposed to `SignalK/signalk-server` under
   regardless of origin (the user dragging the chart, the host recentring, or an
   extension's own `center`/`fitBounds`). Authoritative method/event contract lives
   in the Plotter Extensions API spec ("Map view").
+- `map.pick` / `map.cancelPick` (capability `map.pick`): `map.pick(params?)`
+  (`MapPickParams`: `prompt?`, `targets?` as `TargetEntry[]`) → `MapPickResult`
+  (`{ pickId }`), resolving at once; `map.cancelPick(pickId)` → `void`, resolving
+  whether or not the pick is still on. The answer is the `map.picked` event
+  (`MapPickedEvent`): `{ pickId, target }` or `{ pickId, cancelled: true, reason }`
+  (`PickCancelReason`). Failures reject with a `MapErrorReason`. Authoritative
+  contract: the Plotter Extensions API spec ("Picking on the map").
+- Map targets: `MapTarget` is a union over `kind` (`TargetKind`) — `PositionTarget`,
+  `StoredTarget` (waypoint, note, region, track: `id`, `href`), `RouteTarget`
+  (`id?`, `href?`, `routeId?`), `VesselTarget` (`context`, `self`), `AtonTarget`,
+  `ChartFeatureTarget` (`chart?`, `class`, `properties`) and
+  `OverlayFeatureTarget` (`overlayId`, `source`, `featureId`, `properties`) —
+  each with `position`, `name?` and `featurePosition?`. `TargetEntry` and
+  `TargetMatchCondition` type an action's or a pick's `targets`. Plain JSON;
+  the bus does not validate targets.
+- `actions.*` (capability `actions`): `actions.setVisibility(ids, visible)` →
+  `void` (over `actions.setVisibility`, `SetVisibilityParams`). A choice reaches
+  the extension as the `action.invoked` event (`ActionInvokedEvent`) or, for a
+  panel or window the action loaded, as `HandshakeContext.invocation`
+  (`ActionInvocation`: `{ actionId, target }`). Failures reject with an
+  `ActionErrorReason`. Actions themselves are manifest entries; the bus does
+  not type manifests. Authoritative contract: the Plotter Extensions API spec
+  ("Actions").
+- `buttons.*` (capability `buttons.visibility`): `buttons.setVisibility(ids,
+  visible)` → `void` (over `buttons.setVisibility`). Failures reject with a
+  `ButtonErrorReason`. Contract: the spec ("Showing and hiding buttons").
 - `resourceGroup.*` (capability `resourceGroups`): typed wrapper for applying a
   stored resource group (`/resources/groups/{id}`) to the host's display.
   Surface: `resourceGroup.apply(id)` → `ResourceGroupApplyResult`
@@ -294,3 +320,13 @@ Must stay covered (vitest, Node, no DOM):
   host does not act on is omitted from `applied`, `resourceGroup.applied` emitted
   for both an extension apply and a host-UI apply, `resourceGroups.unknownId` and
   `resourceGroups.badRequest` reason propagation, generic `call()` path.
+- Action and button helper conformance: `actions` and `buttons.visibility`
+  advertised, `context.invocation` carried by the handshake (and absent when no
+  action loaded the context), `action.invoked` delivered only to a subscribed
+  context, `actions.setVisibility` / `buttons.setVisibility` params, and reason
+  propagation for `badRequest`, `unknownId` and `notSupported`.
+- `map.pick` helper conformance: `pick` params (and `{}` when omitted), the
+  target arriving as `map.picked`, a new pick superseding the one that is on,
+  `cancelPick` ending the pick and resolving again once it is over, `map.picked`
+  delivered only to a subscribed context, and `map.badRequest` / `map.pickBusy`
+  reason propagation.

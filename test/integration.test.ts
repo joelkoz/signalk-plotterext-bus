@@ -3,12 +3,17 @@ import { HostConnection } from '../src/host'
 import { connectExtension, ExtensionClient } from '../src/extension'
 import { messagePort } from '../src/port'
 import {
+  ActionInvocation,
+  ActionInvokedEvent,
   ChartLayer,
   ChartOpacityEvent,
   ChartOrderEvent,
   ChartTime,
   ChartTimeEvent,
   ChartVisibilityEvent,
+  MapPickParams,
+  MapPickedEvent,
+  MapTarget,
   MapView,
   MapViewEvent,
   NightModeChangedEvent,
@@ -29,6 +34,7 @@ import {
   RpcError,
   RouteDirtyEvent,
   RoutePoint,
+  SetVisibilityParams,
   SignalKValueEvent,
   WindowClosedEvent,
   WindowState
@@ -1908,5 +1914,229 @@ describe('data overlay helpers', () => {
     const { client } = await dataRig(false)
     expect(client.hasCapability('overlays.data')).toBe(false)
     await expect(client.overlays.refresh({ overlayId: 'depth', source: 'depth' })).rejects.toHaveProperty('reason', 'overlays.notSupported')
+  })
+})
+
+describe('action helpers', () => {
+  // A tiny in-memory host mirroring the `actions` and `buttons.visibility`
+  // capabilities: it knows the extension's manifest ids, validates params as
+  // the spec says, and records every accepted call.
+  const LANDMARK: MapTarget = {
+    kind: 'chartFeature',
+    position: [-173.9792, -18.6473],
+    featurePosition: [-173.9826, -18.6473],
+    name: 'Communications Tower Mt Talau',
+    chart: { id: 'tonga-enc' },
+    class: 'LNDMRK',
+    properties: { OBJNAM: 'Communications Tower Mt Talau', CATLMK: '17' }
+  }
+
+  async function actionsRig(opts: { capable?: boolean; invocation?: ActionInvocation } = {}) {
+    const capable = opts.capable ?? true
+    const calls: { method: string; params: unknown }[] = []
+    const manifest = { actions: ['take-bearing', 'resolve-fix'], buttons: ['stop-recording'] }
+    const visibility = (area: 'actions' | 'buttons', capability: string) => (params: unknown) => {
+      if (!capable) throw new RpcError(`${capability} not supported`, { reason: `${area}.notSupported` })
+      const p = params as SetVisibilityParams
+      if (!Array.isArray(p?.ids) || p.ids.some((id) => typeof id !== 'string') || typeof p.visible !== 'boolean') {
+        throw new RpcError('bad params', { reason: `${area}.badRequest` })
+      }
+      if (p.ids.some((id) => !manifest[area].includes(id))) {
+        throw new RpcError('unknown id', { reason: `${area}.unknownId` })
+      }
+      calls.push({ method: `${area}.setVisibility`, params })
+      return {}
+    }
+    const r = await rig({
+      hostInfo: {
+        ...HOST_INFO,
+        capabilities: capable ? [...HOST_INFO.capabilities, 'actions', 'buttons', 'buttons.visibility'] : HOST_INFO.capabilities
+      },
+      context: { kind: 'panel', id: 'sights', instanceId: null, ...(opts.invocation ? { invocation: opts.invocation } : {}) },
+      methods: {
+        'actions.setVisibility': visibility('actions', 'actions'),
+        'buttons.setVisibility': visibility('buttons', 'buttons.visibility')
+      }
+    })
+    return { ...r, calls }
+  }
+
+  it('advertises the actions and buttons.visibility capabilities', async () => {
+    const { client } = await actionsRig()
+    expect(client.hasCapability('actions')).toBe(true)
+    expect(client.hasCapability('buttons.visibility')).toBe(true)
+  })
+
+  it('carries the invocation that loaded a panel in its handshake', async () => {
+    const invocation: ActionInvocation = { actionId: 'take-bearing', target: LANDMARK }
+    const { client } = await actionsRig({ invocation })
+    expect(client.context.invocation).toEqual(invocation)
+  })
+
+  it('has no invocation when an action did not load the context', async () => {
+    const { client } = await actionsRig()
+    expect(client.context.invocation).toBeUndefined()
+  })
+
+  it('delivers action.invoked to a subscribed context', async () => {
+    const { client, host } = await actionsRig()
+    const events: ActionInvokedEvent[] = []
+    await client.subscribe(['action.invoked'], (_n, p) => events.push(p as ActionInvokedEvent))
+    const invoked: ActionInvokedEvent = { actionId: 'take-bearing', target: LANDMARK }
+    expect(host.publish('action.invoked', invoked)).toBe(true)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(events).toEqual([invoked])
+  })
+
+  it('does not deliver action.invoked without a subscription', async () => {
+    const { host } = await actionsRig()
+    expect(host.publish('action.invoked', { actionId: 'take-bearing', target: LANDMARK })).toBe(false)
+  })
+
+  it('actions.setVisibility sends ids and visible', async () => {
+    const { client, calls } = await actionsRig()
+    await client.actions.setVisibility(['resolve-fix'], true)
+    expect(calls).toEqual([{ method: 'actions.setVisibility', params: { ids: ['resolve-fix'], visible: true } }])
+  })
+
+  it('buttons.setVisibility sends ids and visible', async () => {
+    const { client, calls } = await actionsRig()
+    await client.buttons.setVisibility(['stop-recording'], false)
+    expect(calls).toEqual([{ method: 'buttons.setVisibility', params: { ids: ['stop-recording'], visible: false } }])
+  })
+
+  it('propagates badRequest and unknownId reasons', async () => {
+    const { client, calls } = await actionsRig()
+    await expect(client.call('actions.setVisibility', { ids: 'resolve-fix', visible: true })).rejects.toHaveProperty(
+      'reason',
+      'actions.badRequest'
+    )
+    await expect(client.actions.setVisibility(['nope'], true)).rejects.toHaveProperty('reason', 'actions.unknownId')
+    await expect(client.buttons.setVisibility(['nope'], true)).rejects.toHaveProperty('reason', 'buttons.unknownId')
+    expect(calls).toEqual([])
+  })
+
+  it('a host without the capabilities rejects with notSupported', async () => {
+    const { client } = await actionsRig({ capable: false })
+    expect(client.hasCapability('actions')).toBe(false)
+    await expect(client.actions.setVisibility(['resolve-fix'], true)).rejects.toHaveProperty(
+      'reason',
+      'actions.notSupported'
+    )
+    await expect(client.buttons.setVisibility(['stop-recording'], true)).rejects.toHaveProperty(
+      'reason',
+      'buttons.notSupported'
+    )
+  })
+})
+
+describe('map pick helpers', () => {
+  // A tiny in-memory host mirroring `map.pick`: one pick on at a time, a new one
+  // supersedes it, cancelPick is idempotent and only ends the caller's own pick.
+  async function pickRig(opts: { busy?: boolean } = {}) {
+    const calls: { method: string; params: unknown }[] = []
+    let current: string | null = null
+    let seq = 0
+    const KINDS = new Set(['position', 'waypoint', 'note', 'route', 'track', 'region', 'vessel', 'aton', 'chartFeature'])
+    const r = await rig({
+      hostInfo: { ...HOST_INFO, capabilities: [...HOST_INFO.capabilities, 'map', 'map.pick'] },
+      context: { kind: 'panel', id: 'router', instanceId: null },
+      methods: {
+        'map.pick': (params) => {
+          const p = (params ?? {}) as MapPickParams
+          if (p.targets !== undefined) {
+            const kinds = Array.isArray(p.targets)
+              ? p.targets.map((t) => (typeof t === 'string' ? t : t?.kind)).filter((k) => KINDS.has(k as string))
+              : []
+            if (kinds.length === 0) throw new RpcError('nothing pickable', { reason: 'map.badRequest' })
+          }
+          if (opts.busy) throw new RpcError('drawing', { reason: 'map.pickBusy' })
+          calls.push({ method: 'map.pick', params })
+          if (current) r.host.publish('map.picked', { pickId: current, cancelled: true, reason: 'superseded' })
+          current = `pick-${++seq}`
+          return { pickId: current }
+        },
+        'map.cancelPick': (params) => {
+          const { pickId } = params as { pickId: string }
+          calls.push({ method: 'map.cancelPick', params })
+          if (pickId === current) {
+            current = null
+            r.host.publish('map.picked', { pickId, cancelled: true, reason: 'extension' })
+          }
+          return {}
+        }
+      }
+    })
+    const select = (target: MapTarget) => {
+      const pickId = current!
+      current = null
+      r.host.publish('map.picked', { pickId, target } satisfies MapPickedEvent)
+    }
+    return { ...r, calls, select }
+  }
+
+  async function collect(client: ExtensionClient) {
+    const events: MapPickedEvent[] = []
+    await client.subscribe(['map.picked'], (_n, p) => events.push(p as MapPickedEvent))
+    return events
+  }
+  const settle = () => new Promise((r) => setTimeout(r, 20))
+
+  it('pick returns a pickId, and the target arrives as map.picked', async () => {
+    const { client, calls, select } = await pickRig()
+    const events = await collect(client)
+    const params: MapPickParams = { prompt: 'Select the waypoint to route to', targets: ['waypoint'] }
+    const { pickId } = await client.map.pick(params)
+    expect(calls).toEqual([{ method: 'map.pick', params }])
+    const target: MapTarget = {
+      kind: 'waypoint',
+      position: [-80.1201, 25.7702],
+      featurePosition: [-80.12, 25.77],
+      name: 'Fowey Rocks',
+      id: 'a1b2',
+      href: '/resources/waypoints/a1b2'
+    }
+    select(target)
+    await settle()
+    expect(events).toEqual([{ pickId, target }])
+  })
+
+  it('pick with no params asks for a position', async () => {
+    const { client, calls } = await pickRig()
+    await client.map.pick()
+    expect(calls).toEqual([{ method: 'map.pick', params: {} }])
+  })
+
+  it('a new pick supersedes the one that is on', async () => {
+    const { client } = await pickRig()
+    const events = await collect(client)
+    const first = await client.map.pick()
+    const second = await client.map.pick()
+    await settle()
+    expect(second.pickId).not.toBe(first.pickId)
+    expect(events).toEqual([{ pickId: first.pickId, cancelled: true, reason: 'superseded' }])
+  })
+
+  it('cancelPick ends the pick, and resolves again once it is over', async () => {
+    const { client, calls } = await pickRig()
+    const events = await collect(client)
+    const { pickId } = await client.map.pick()
+    await client.map.cancelPick(pickId)
+    await client.map.cancelPick(pickId)
+    await settle()
+    expect(events).toEqual([{ pickId, cancelled: true, reason: 'extension' }])
+    expect(calls.filter((c) => c.method === 'map.cancelPick')).toHaveLength(2)
+  })
+
+  it('propagates map.badRequest and map.pickBusy', async () => {
+    const { client } = await pickRig()
+    await expect(client.map.pick({ targets: ['teleporter' as never] })).rejects.toHaveProperty('reason', 'map.badRequest')
+    const busy = await pickRig({ busy: true })
+    await expect(busy.client.map.pick()).rejects.toHaveProperty('reason', 'map.pickBusy')
+  })
+
+  it('does not deliver map.picked without a subscription', async () => {
+    const { host } = await pickRig()
+    expect(host.publish('map.picked', { pickId: 'pick-1', cancelled: true, reason: 'user' })).toBe(false)
   })
 })

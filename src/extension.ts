@@ -6,6 +6,8 @@ import {
   EVENT_READY,
   Handshake,
   HandshakeContext,
+  MapPickParams,
+  MapPickResult,
   MapView,
   NightModeState,
   OverlayFrameParams,
@@ -26,6 +28,7 @@ import {
   RouteSummary,
   RPC_ERRORS,
   RpcError,
+  SetVisibilityParams,
   SignalKValueEvent,
   StateScope,
   WindowListResult,
@@ -465,6 +468,43 @@ export class ExtensionClient {
       bounds: [number, number, number, number]
     ): Promise<void> => {
       await this.call('map.fitBounds', { bounds })
+    },
+    /**
+     * Ask the user to pick a point or feature (capability `map.pick`). Resolves
+     * at once with the `pickId`; the answer arrives later as the `map.picked`
+     * event (`MapPickedEvent`), delivered only to this context — subscribe to
+     * it before calling.
+     */
+    pick: async (params: MapPickParams = {}): Promise<MapPickResult> => {
+      return (await this.call('map.pick', params)) as MapPickResult
+    },
+    /** End this context's pick if it is still on. Resolves either way. */
+    cancelPick: async (pickId: string): Promise<void> => {
+      await this.call('map.cancelPick', { pickId })
+    }
+  }
+
+  /**
+   * The extension's manifest actions (capability `actions`). The host offers
+   * them on chart targets and reports a choice with the `action.invoked` event
+   * (`ActionInvokedEvent`), or in `context.invocation` for a panel or window
+   * the action loaded. `setVisibility` shows and hides actions that depend on
+   * the extension's state; it is not persisted, so set it again on load.
+   */
+  readonly actions = {
+    setVisibility: async (ids: string[], visible: boolean): Promise<void> => {
+      await this.call('actions.setVisibility', { ids, visible } satisfies SetVisibilityParams)
+    }
+  }
+
+  /**
+   * The extension's toolbar buttons (capability `buttons.visibility`). Shows
+   * and hides them as the extension's state changes; not persisted, so set it
+   * again on load.
+   */
+  readonly buttons = {
+    setVisibility: async (ids: string[], visible: boolean): Promise<void> => {
+      await this.call('buttons.setVisibility', { ids, visible } satisfies SetVisibilityParams)
     }
   }
 
