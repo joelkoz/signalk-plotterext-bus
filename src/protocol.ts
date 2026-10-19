@@ -157,6 +157,13 @@ export interface HandshakeContext {
   windowId?: string
   /** The `params` the window was opened with (`window` contexts). */
   params?: Record<string, unknown>
+  /**
+   * The action invocation that loaded this panel or window (capability
+   * `actions`). Present only when the user choosing one of the extension's
+   * actions is what loaded this context; such a context does not also receive
+   * `action.invoked` for that invocation.
+   */
+  invocation?: ActionInvocation
 }
 
 export interface Handshake {
@@ -492,6 +499,219 @@ export interface MapView {
  * on the vessel, or an extension's own `map.center` / `map.fitBounds`.
  */
 export type MapViewEvent = MapView
+
+/**
+ * Types for map targets — the thing on the chart an action is chosen on
+ * (capability `actions`) or a pick yields (capability `map.pick`). See the
+ * Plotter Extensions API spec, "Actions" and "Picking on the map".
+ */
+
+/**
+ * The kinds of target. Hosts and extensions ignore kinds they do not know, so
+ * a later version may add kinds without breaking either side.
+ */
+export type TargetKind =
+  | 'position'
+  | 'waypoint'
+  | 'note'
+  | 'route'
+  | 'track'
+  | 'region'
+  | 'vessel'
+  | 'aton'
+  | 'chartFeature'
+  | 'overlayFeature'
+
+/** Fields every target carries. */
+export interface TargetBase {
+  kind: TargetKind
+  /** The point the user selected, `[lon, lat]`, longitude in `[-180, 180]`. */
+  position: [number, number]
+  /** The target's name, when the host knows one. */
+  name?: string
+  /**
+   * The target's own position when it is a point (a waypoint, a note, a vessel
+   * or aid where the host last had it, a point feature). Take bearings and
+   * ranges from this, not from `position`.
+   */
+  featurePosition?: [number, number]
+}
+
+/** A point on the chart. */
+export interface PositionTarget extends TargetBase {
+  kind: 'position'
+}
+
+/** A stored waypoint, note, region or track. */
+export interface StoredTarget extends TargetBase {
+  kind: 'waypoint' | 'note' | 'region' | 'track'
+  /** The stored object's id. */
+  id: string
+  /**
+   * Its path relative to `/signalk/v2/api`: `/resources/<type>/<id>`, or for a
+   * track `/tracks/<id>` (Track API) or `/resources/tracks/<id>`.
+   */
+  href: string
+}
+
+/** A stored route, or a draft route on the chart. */
+export interface RouteTarget extends TargetBase {
+  kind: 'route'
+  /** Stored routes only. */
+  id?: string
+  /** Stored routes only: `/resources/routes/<id>`. */
+  href?: string
+  /** The route's opaque handle when it is in the visible set (capability `routes`). */
+  routeId?: string
+}
+
+/** The own vessel or another vessel. */
+export interface VesselTarget extends TargetBase {
+  kind: 'vessel'
+  /** Signal K context, e.g. `vessels.urn:mrn:imo:mmsi:367123450`; the own vessel may be `vessels.self`. */
+  context: string
+  self: boolean
+}
+
+/** A Signal K aid to navigation. */
+export interface AtonTarget extends TargetBase {
+  kind: 'aton'
+  /** Signal K context, e.g. `atons.urn:mrn:imo:mmsi:993672001`. */
+  context: string
+}
+
+/** A feature of a chart layer, e.g. a landmark or light in an ENC. */
+export interface ChartFeatureTarget extends TargetBase {
+  kind: 'chartFeature'
+  /** The chart, when the host knows it (its `chart.list` id). */
+  chart?: { id: string }
+  /** S-57 object class acronym (`LNDMRK`, `LIGHTS` …) for an ENC; the source layer for a vector chart. */
+  class: string
+  /** The feature's attributes as the chart provides them. */
+  properties: Record<string, unknown>
+}
+
+/** A feature of one of the extension's own interactive data overlays (capability `actions.overlay`). */
+export interface OverlayFeatureTarget extends TargetBase {
+  kind: 'overlayFeature'
+  overlayId: string
+  /** The source's id in the overlay's style. */
+  source: string
+  /** The feature's id, exactly as the extension gave it. */
+  featureId: string | number
+  /** The feature's own properties. */
+  properties: Record<string, unknown>
+}
+
+/** What an action was chosen on, or what a pick yielded. A snapshot taken when the user selected. */
+export type MapTarget =
+  | PositionTarget
+  | StoredTarget
+  | RouteTarget
+  | VesselTarget
+  | AtonTarget
+  | ChartFeatureTarget
+  | OverlayFeatureTarget
+
+/**
+ * A condition of a target entry's `match` — the same grammar as a
+ * `resources.setFilter` condition.
+ */
+export interface TargetMatchCondition {
+  path: string
+  op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte' | 'in' | 'contains' | 'regex' | 'exists'
+  value?: unknown
+  /** Compare symbol references strictly (`eq`, `ne`, `in`). */
+  exact?: boolean
+}
+
+/**
+ * An entry of `targets` — in an action's manifest entry and in `map.pick`: a
+ * kind, or a kind narrowed. `match` applies to waypoint, note, route, track,
+ * region, chartFeature and overlayFeature; `self` to vessel; `overlays` to
+ * overlayFeature.
+ */
+export type TargetEntry =
+  | TargetKind
+  | {
+      kind: TargetKind
+      match?: TargetMatchCondition[]
+      self?: boolean
+      overlays?: string[]
+    }
+
+/**
+ * Types for the `map.pick` capability — the extension asks the user to pick a
+ * point or feature on the chart. `map.pick` returns at once; the answer is the
+ * `map.picked` event, delivered only to the context that asked.
+ */
+
+/** Params of `map.pick`. */
+export interface MapPickParams {
+  /** Plain text the host shows while the pick is on. */
+  prompt?: string
+  /** What may be picked. Default `['position']`. */
+  targets?: TargetEntry[]
+}
+
+/** Result of `map.pick`. */
+export interface MapPickResult {
+  pickId: string
+}
+
+/** Params of `map.cancelPick`. */
+export interface MapCancelPickParams {
+  pickId: string
+}
+
+/** Why a pick ended without a target. */
+export type PickCancelReason = 'user' | 'extension' | 'superseded' | 'host'
+
+/** Payload of a `map.picked` event: the user picked, or the pick was cancelled. */
+export type MapPickedEvent =
+  | { pickId: string; target: MapTarget; cancelled?: undefined }
+  | { pickId: string; cancelled: true; reason: PickCancelReason }
+
+/**
+ * Stable `error.data.reason` strings for `map.pick` / `map.cancelPick`
+ * failures. `map.pickBusy`: the user is in a modal interaction (drawing,
+ * measuring, editing) that a pick must not interrupt.
+ */
+export type MapErrorReason = 'map.badRequest' | 'map.pickBusy' | 'map.notSupported'
+
+/**
+ * Types for the `actions` capability — manifest-declared actions the host
+ * offers on chart targets. See the Plotter Extensions API spec, "Actions".
+ */
+
+/**
+ * One choice of one of the extension's actions: the payload of the
+ * `action.invoked` event and of `HandshakeContext.invocation`.
+ */
+export interface ActionInvocation {
+  /** The action's manifest id. */
+  actionId: string
+  target: MapTarget
+}
+
+/** Payload of an `action.invoked` host event — delivered only to the owning extension's contexts. */
+export type ActionInvokedEvent = ActionInvocation
+
+/** Params of `actions.setVisibility` and `buttons.setVisibility`. */
+export interface SetVisibilityParams {
+  /** Manifest ids of the caller's own actions (or buttons). */
+  ids: string[]
+  visible: boolean
+}
+
+/** Stable `error.data.reason` strings for `actions.setVisibility` failures. */
+export type ActionErrorReason = 'actions.badRequest' | 'actions.unknownId' | 'actions.notSupported'
+
+/**
+ * Stable `error.data.reason` strings for `buttons.setVisibility` failures
+ * (capability `buttons.visibility`).
+ */
+export type ButtonErrorReason = 'buttons.badRequest' | 'buttons.unknownId' | 'buttons.notSupported'
 
 /**
  * Types for the `resourceGroups` capability — applying a stored resource group

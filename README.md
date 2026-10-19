@@ -135,8 +135,8 @@ Host API methods (`state.*`, `signalk.*`, `map.*`, `route.*`, `chart.*`, …) ar
 supplied by the embedding host application; see the plotter extension
 specification for the vocabulary. The client exposes typed convenience wrappers
 for some of them (`client.state`, `client.signalk`, `client.route`,
-`client.chart`); all are equally reachable through the generic
-`client.call(method, params)`.
+`client.chart`, `client.map`, `client.actions`, `client.buttons`, …); all are
+equally reachable through the generic `client.call(method, params)`.
 
 ### Route error reasons
 
@@ -221,6 +221,30 @@ A **refused frame is a result, not an error**: `overlay.frame` resolves with
 `events.publish` rejects with a JSON-RPC error whose `error.data.reason` is the
 `PublishErrorReason` string `events.badRequest`: a missing or empty `topic`, a
 `topic` containing `*` or in the `bus.*` namespace, or an unknown `scope`.
+
+### Action and button error reasons
+
+`actions.setVisibility` and `buttons.setVisibility` reject with a JSON-RPC
+error whose `error.data.reason` is an `ActionErrorReason` or
+`ButtonErrorReason` string:
+
+| `reason` | Meaning |
+| --- | --- |
+| `actions.badRequest` / `buttons.badRequest` | Malformed params — `ids` not a list of strings, or `visible` not a boolean. |
+| `actions.unknownId` / `buttons.unknownId` | An id that is not an action (button) of the caller's manifest; nothing is changed. |
+| `actions.notSupported` / `buttons.notSupported` | The host does not implement `actions` (`buttons.visibility`). |
+
+### Map pick error reasons
+
+`map.pick` rejects with a JSON-RPC error whose `error.data.reason` is a
+`MapErrorReason` string. `map.cancelPick` does not fail: it resolves whether or
+not the pick is still on.
+
+| `reason` | Meaning |
+| --- | --- |
+| `map.badRequest` | Malformed params — e.g. a `targets` that is not a list, or names no kind the host supports. |
+| `map.pickBusy` | The user is in a modal interaction (drawing, measuring, editing) that a pick must not interrupt. |
+| `map.notSupported` | The host does not implement `map.pick`. |
 
 ### Resource-group error reasons
 
@@ -394,6 +418,35 @@ if (client.hasCapability('resourceGroups')) {
   // `applied` = the types the host acted on (best effort), e.g. ['routes', 'charts'].
   // Follow applies from any origin, including the user's own group picker:
   await client.subscribe(['resourceGroup.applied'], (_name, { id }) => highlight(id))
+}
+
+// Actions (capability `actions`) — manifest-declared entries the host offers in
+// its own menus and popovers on chart targets. A panel or window the action
+// loaded finds the choice in its handshake; already-loaded contexts get the
+// `action.invoked` event. `target` is a MapTarget: `kind`, the selected
+// `position`, and per kind `featurePosition`, `href`, `routeId`, `context` …
+if (client.hasCapability('actions')) {
+  const take = ({ actionId, target }) => logSight(actionId, target.featurePosition ?? target.position)
+  if (client.context.invocation) take(client.context.invocation)
+  await client.subscribe(['action.invoked'], (_name, inv) => take(inv))
+  // actions that depend on the extension's own state; not persisted by the host
+  await client.actions.setVisibility(['resolve-fix'], sessionActive)
+}
+
+// Toolbar buttons that come and go (capability `buttons.visibility`)
+if (client.hasCapability('buttons.visibility')) {
+  await client.buttons.setVisibility(['stop-recording'], recording)
+}
+
+// Ask the user to pick something (capability `map.pick`). The call returns at
+// once; the answer is the `map.picked` event, sent only to this context.
+if (client.hasCapability('map.pick')) {
+  await client.subscribe(['map.picked'], (_name, picked) => {
+    if (picked.cancelled) return resetUi(picked.reason) // user | extension | superseded | host
+    setDestination(picked.target)
+  })
+  const { pickId } = await client.map.pick({ prompt: 'Select a waypoint or tap a spot', targets: ['waypoint', 'position'] })
+  // await client.map.cancelPick(pickId)
 }
 ```
 
