@@ -708,10 +708,46 @@ export interface SetVisibilityParams {
 export type ActionErrorReason = 'actions.badRequest' | 'actions.unknownId' | 'actions.notSupported'
 
 /**
- * Stable `error.data.reason` strings for `buttons.setVisibility` failures
- * (capability `buttons.visibility`).
+ * Stable `error.data.reason` strings for `buttons.setVisibility` (capability
+ * `buttons.visibility`) and `buttons.decorate` (capability
+ * `buttons.decorations`) failures.
  */
 export type ButtonErrorReason = 'buttons.badRequest' | 'buttons.unknownId' | 'buttons.notSupported'
+
+/**
+ * How the host draws a button (capability `buttons.decorations`), in its own
+ * colours for its theme and day/night display. `active` means the function the
+ * button controls is switched on; it says nothing about whether the button can
+ * be pressed.
+ */
+export type ButtonStyle = 'normal' | 'active' | 'warning' | 'alarm'
+
+/**
+ * Custom button colours, each a `#rrggbb` string, overriding those of the
+ * button's style. One left out comes from the style. A host that cannot draw
+ * custom colours ignores them and draws the style.
+ */
+export interface ButtonColors {
+  fg?: string
+  bg?: string
+}
+
+/**
+ * The decorations `buttons.decorate` sets. One left out is unchanged; `null`
+ * returns it to the button's manifest value. `colors` is replaced as a whole.
+ */
+export interface ButtonDecorations {
+  style?: ButtonStyle | null
+  colors?: ButtonColors | null
+  /** A count shown on the button: a whole number, `0` or more. `0` shows no badge. */
+  badge?: number | null
+}
+
+/** Params of `buttons.decorate`. */
+export interface DecorateButtonsParams extends ButtonDecorations {
+  /** Manifest ids of the caller's own buttons. */
+  ids: string[]
+}
 
 /**
  * Types for the `resourceGroups` capability — applying a stored resource group

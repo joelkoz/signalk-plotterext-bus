@@ -11,6 +11,7 @@ import {
   ChartTime,
   ChartTimeEvent,
   ChartVisibilityEvent,
+  DecorateButtonsParams,
   MapPickParams,
   MapPickedEvent,
   MapTarget,
@@ -2024,6 +2025,114 @@ describe('action helpers', () => {
       'actions.notSupported'
     )
     await expect(client.buttons.setVisibility(['stop-recording'], true)).rejects.toHaveProperty(
+      'reason',
+      'buttons.notSupported'
+    )
+  })
+})
+
+describe('button decoration helpers', () => {
+  // A tiny in-memory host mirroring `buttons.decorations`: it validates params
+  // as the spec says and records every accepted call.
+  const STYLES = ['normal', 'active', 'warning', 'alarm']
+  const COLOR = /^#[0-9a-fA-F]{6}$/
+
+  function badDecorations(p: DecorateButtonsParams): boolean {
+    if (!Array.isArray(p?.ids) || p.ids.some((id) => typeof id !== 'string')) return true
+    if (p.style === undefined && p.colors === undefined && p.badge === undefined) return true
+    if (p.style != null && !STYLES.includes(p.style)) return true
+    if (p.colors != null) {
+      if (typeof p.colors !== 'object') return true
+      if ([p.colors.fg, p.colors.bg].some((c) => c !== undefined && !(typeof c === 'string' && COLOR.test(c)))) return true
+    }
+    if (p.badge != null && !(Number.isInteger(p.badge) && p.badge >= 0)) return true
+    return false
+  }
+
+  async function decorationsRig(opts: { capable?: boolean } = {}) {
+    const capable = opts.capable ?? true
+    const calls: { method: string; params: unknown }[] = []
+    const buttons = ['pending-sights', 'dead-reckoning']
+    const r = await rig({
+      hostInfo: {
+        ...HOST_INFO,
+        capabilities: capable ? [...HOST_INFO.capabilities, 'buttons', 'buttons.decorations'] : HOST_INFO.capabilities
+      },
+      context: { kind: 'background', id: 'sights', instanceId: null },
+      methods: {
+        'buttons.decorate': (params: unknown) => {
+          if (!capable) throw new RpcError('buttons.decorations not supported', { reason: 'buttons.notSupported' })
+          const p = params as DecorateButtonsParams
+          if (badDecorations(p)) throw new RpcError('bad params', { reason: 'buttons.badRequest' })
+          if (p.ids.some((id) => !buttons.includes(id))) {
+            throw new RpcError('unknown id', { reason: 'buttons.unknownId' })
+          }
+          calls.push({ method: 'buttons.decorate', params })
+          return {}
+        }
+      }
+    })
+    return { ...r, calls }
+  }
+
+  it('advertises the buttons.decorations capability', async () => {
+    const { client } = await decorationsRig()
+    expect(client.hasCapability('buttons.decorations')).toBe(true)
+  })
+
+  it('sends only the decorations given', async () => {
+    const { client, calls } = await decorationsRig()
+    await client.buttons.decorate(['pending-sights'], { badge: 3 })
+    await client.buttons.decorate(['dead-reckoning'], {
+      style: 'warning',
+      colors: { fg: '#000000', bg: '#ffd600' }
+    })
+    expect(calls).toEqual([
+      { method: 'buttons.decorate', params: { ids: ['pending-sights'], badge: 3 } },
+      {
+        method: 'buttons.decorate',
+        params: { ids: ['dead-reckoning'], style: 'warning', colors: { fg: '#000000', bg: '#ffd600' } }
+      }
+    ])
+  })
+
+  it('sends null to return a decoration to its manifest value', async () => {
+    const { client, calls } = await decorationsRig()
+    await client.buttons.decorate(['dead-reckoning'], { style: null, colors: null, badge: null })
+    expect(calls).toEqual([
+      { method: 'buttons.decorate', params: { ids: ['dead-reckoning'], style: null, colors: null, badge: null } }
+    ])
+  })
+
+  it('the ids argument wins over an ids field in the decorations', async () => {
+    const { client, calls } = await decorationsRig()
+    await client.buttons.decorate(['pending-sights'], { badge: 1, ids: ['nope'] } as never)
+    expect(calls).toEqual([{ method: 'buttons.decorate', params: { ids: ['pending-sights'], badge: 1 } }])
+  })
+
+  it('propagates badRequest and unknownId reasons', async () => {
+    const { client, calls } = await decorationsRig()
+    for (const bad of [
+      {},
+      { style: 'flashing' },
+      { colors: { fg: 'yellow' } },
+      { colors: { bg: '#fff' } },
+      { badge: -1 },
+      { badge: 2.5 }
+    ]) {
+      await expect(client.buttons.decorate(['pending-sights'], bad as never)).rejects.toHaveProperty(
+        'reason',
+        'buttons.badRequest'
+      )
+    }
+    await expect(client.buttons.decorate(['nope'], { badge: 1 })).rejects.toHaveProperty('reason', 'buttons.unknownId')
+    expect(calls).toEqual([])
+  })
+
+  it('a host without the capability rejects with notSupported', async () => {
+    const { client } = await decorationsRig({ capable: false })
+    expect(client.hasCapability('buttons.decorations')).toBe(false)
+    await expect(client.buttons.decorate(['pending-sights'], { badge: 1 })).rejects.toHaveProperty(
       'reason',
       'buttons.notSupported'
     )

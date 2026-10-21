@@ -207,6 +207,12 @@ specification (proposed to `SignalK/signalk-server` under
 - `buttons.*` (capability `buttons.visibility`): `buttons.setVisibility(ids,
   visible)` → `void` (over `buttons.setVisibility`). Failures reject with a
   `ButtonErrorReason`. Contract: the spec ("Showing and hiding buttons").
+  With capability `buttons.decorations`: `buttons.decorate(ids, decorations)`
+  → `void` (over `buttons.decorate`, `DecorateButtonsParams`; `decorations` is
+  a `ButtonDecorations` — `style?: ButtonStyle`, `colors?: ButtonColors`,
+  `badge?: number`, each also `null`). Sends only the decorations given.
+  Failures reject with a `ButtonErrorReason`. Contract: the spec ("Decorating
+  buttons").
 - `resourceGroup.*` (capability `resourceGroups`): typed wrapper for applying a
   stored resource group (`/resources/groups/{id}`) to the host's display.
   Surface: `resourceGroup.apply(id)` → `ResourceGroupApplyResult`
@@ -325,6 +331,9 @@ Must stay covered (vitest, Node, no DOM):
   action loaded the context), `action.invoked` delivered only to a subscribed
   context, `actions.setVisibility` / `buttons.setVisibility` params, and reason
   propagation for `badRequest`, `unknownId` and `notSupported`.
+- Button decoration helper conformance: `buttons.decorations` advertised,
+  `buttons.decorate` sending only the decorations given (and `null` as is),
+  and reason propagation for `badRequest`, `unknownId` and `notSupported`.
 - `map.pick` helper conformance: `pick` params (and `{}` when omitted), the
   target arriving as `map.picked`, a new pick superseding the one that is on,
   `cancelPick` ending the pick and resolving again once it is over, `map.picked`
