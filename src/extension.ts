@@ -1,7 +1,9 @@
 import { BusEndpoint, EventHandler } from './endpoint'
 import { BusPort, windowPort } from './port'
 import {
+  ButtonDecorations,
   ChartLayer,
+  DecorateButtonsParams,
   EVENT_HANDSHAKE,
   EVENT_READY,
   Handshake,
@@ -498,13 +500,17 @@ export class ExtensionClient {
   }
 
   /**
-   * The extension's toolbar buttons (capability `buttons.visibility`). Shows
-   * and hides them as the extension's state changes; not persisted, so set it
-   * again on load.
+   * The extension's toolbar buttons. `setVisibility` (capability
+   * `buttons.visibility`) shows and hides them; `decorate` (capability
+   * `buttons.decorations`) sets their style, custom colours and badge. Neither
+   * is persisted, so set them again on load.
    */
   readonly buttons = {
     setVisibility: async (ids: string[], visible: boolean): Promise<void> => {
       await this.call('buttons.setVisibility', { ids, visible } satisfies SetVisibilityParams)
+    },
+    decorate: async (ids: string[], decorations: ButtonDecorations): Promise<void> => {
+      await this.call('buttons.decorate', { ...decorations, ids } satisfies DecorateButtonsParams)
     }
   }
 

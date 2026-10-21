@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.24.0
+
+Button decorations. Additive; `BUS_ID` stays `plotterExt/1`.
+
+- **Button decorations** (capability `buttons.decorations`). New client helper
+  `client.buttons.decorate(ids, decorations)` over `buttons.decorate`: a
+  button's `style` (`ButtonStyle`: `normal`, `active`, `warning`, `alarm`,
+  drawn in the host's own colours), custom `colors` (`ButtonColors`, `#rrggbb`
+  `fg` / `bg`, overriding the style's) and a numeric `badge`. Only the
+  decorations given change; `null` returns one to its manifest value. Failures
+  reject with the existing `ButtonErrorReason` strings.
+- **New types:** `ButtonStyle`, `ButtonColors`, `ButtonDecorations`,
+  `DecorateButtonsParams`.
+- Spec: Plotter Extensions API, "Decorating buttons".
+
 ## 0.23.0
 
 Map actions, map picks and button visibility. (Meant for 0.22.0, but 0.22.0

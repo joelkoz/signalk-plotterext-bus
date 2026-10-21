@@ -234,6 +234,13 @@ error whose `error.data.reason` is an `ActionErrorReason` or
 | `actions.unknownId` / `buttons.unknownId` | An id that is not an action (button) of the caller's manifest; nothing is changed. |
 | `actions.notSupported` / `buttons.notSupported` | The host does not implement `actions` (`buttons.visibility`). |
 
+`buttons.decorate` rejects with the same `ButtonErrorReason` strings. Its
+`buttons.badRequest` also covers a call with no decoration, a `style` that is
+not `normal`, `active`, `warning` or `alarm`, a colour that is not a `#rrggbb`
+string, and a `badge` that is not a whole number `0` or more;
+`buttons.notSupported` means the host does not implement `buttons.decorations`.
+A call that fails changes nothing.
+
 ### Map pick error reasons
 
 `map.pick` rejects with a JSON-RPC error whose `error.data.reason` is a
@@ -436,6 +443,14 @@ if (client.hasCapability('actions')) {
 // Toolbar buttons that come and go (capability `buttons.visibility`)
 if (client.hasCapability('buttons.visibility')) {
   await client.buttons.setVisibility(['stop-recording'], recording)
+}
+
+// Toolbar buttons that show state (capability `buttons.decorations`). `style`
+// is drawn in the host's own colours; `colors` overrides them; `badge: 0`
+// clears the count; `null` returns a decoration to its manifest value.
+if (client.hasCapability('buttons.decorations')) {
+  await client.buttons.decorate(['pending-sights'], { badge: pending.length })
+  await client.buttons.decorate(['dead-reckoning'], { style: gnssPoor ? 'warning' : 'normal' })
 }
 
 // Ask the user to pick something (capability `map.pick`). The call returns at
