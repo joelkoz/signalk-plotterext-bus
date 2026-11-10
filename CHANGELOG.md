@@ -2,7 +2,7 @@
 
 ## 0.25.0
 
-Per-device state. Additive; `BUS_ID` stays `plotterExt/1`.
+Per-device state and animated image overlays. Additive; `BUS_ID` stays `plotterExt/1`.
 
 - **State storage** (capability `state.storage`). `state.get` / `state.set`
   take an optional `storage`: `'user'` (the default; follows the user's
@@ -14,7 +14,13 @@ Per-device state. Additive; `BUS_ID` stays `plotterExt/1`.
   object `{ scope?, storage? }`.
 - **New types:** `StateStorage`, `StateOptions`, `StateGetParams`,
   `StateSetParams`; `StateChangedEvent` gains `storage?`.
-- Spec: Plotter Extensions API, "State storage".
+- **Animated overlays** (capability `overlays.animated`). An image overlay
+  that declares `preferredLiveInterval` in its manifest asks for live frames at
+  an animation rate; the host grants that interval or a longer one, within its
+  own budget, in `overlay.request`'s `liveInterval` as before.
+- `OverlayStateEvent` gains `liveInterval?`: the host's new grant when it
+  changes between requests (for example when compositing gets expensive).
+- Spec: Plotter Extensions API, "State storage" and "Animated overlays".
 
 ## 0.24.0
 

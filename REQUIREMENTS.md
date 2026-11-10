@@ -147,7 +147,9 @@ specification (proposed to `SignalK/signalk-server` under
   `overlay.state` (`OverlayStateEvent`). Failures reject with a stable
   `error.data.reason` from `OverlayErrorReason`; refused frames resolve with an
   `OverlayFrameRefusal`. `OverlayRequestEvent.liveInterval` (optional) carries
-  the host's live-frame pace; an overlay configuration panel's handshake context
+  the host's live-frame pace, and `OverlayStateEvent.liveInterval` (optional,
+  capability `overlays.animated`) a change to it between requests, for an
+  overlay that declares `preferredLiveInterval` in its manifest; an overlay configuration panel's handshake context
   carries `targetOverlay` (also on `PanelState`). Authoritative method/event contract lives in the
   Plotter Extensions API spec ("Map overlays").
 - `overlays.*` data-overlay wrappers (capability `overlays.data`): map layers
