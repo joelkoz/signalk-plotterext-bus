@@ -240,6 +240,29 @@ describe('state helpers', () => {
     })
     await expect(client.state.get(['missing'])).resolves.toEqual({})
   })
+
+  it('sends scope and storage from an options object, and keeps the scope string form', async () => {
+    const calls: Array<{ method: string; params: unknown }> = []
+    const record = (method: string) => (params: unknown) => {
+      calls.push({ method, params })
+      return method === 'state.get' ? { values: {} } : {}
+    }
+    const { client } = await rig({
+      methods: { 'state.get': record('state.get'), 'state.set': record('state.set') }
+    })
+    await client.state.get(['titleBars'], { scope: 'extension', storage: 'device' })
+    await client.state.set({ titleBars: {} }, { scope: 'extension', storage: 'device' })
+    await client.state.get(['titleBars'], 'extension')
+    await client.state.set({ a: 1 }, { storage: 'device' })
+    await client.state.get()
+    expect(calls).toEqual([
+      { method: 'state.get', params: { scope: 'extension', storage: 'device', keys: ['titleBars'] } },
+      { method: 'state.set', params: { scope: 'extension', storage: 'device', values: { titleBars: {} } } },
+      { method: 'state.get', params: { scope: 'extension', keys: ['titleBars'] } },
+      { method: 'state.set', params: { storage: 'device', values: { a: 1 } } },
+      { method: 'state.get', params: {} }
+    ])
+  })
 })
 
 describe('signalk helpers', () => {

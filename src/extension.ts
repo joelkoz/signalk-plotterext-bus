@@ -32,7 +32,10 @@ import {
   RpcError,
   SetVisibilityParams,
   SignalKValueEvent,
+  StateGetParams,
+  StateOptions,
   StateScope,
+  StateSetParams,
   WindowListResult,
   WindowOpenParams,
   WindowState,
@@ -152,26 +155,30 @@ export class ExtensionClient {
     })
   }
 
-  /** Host-persisted key/value state (see spec: State Storage). */
+  /**
+   * Host-persisted key/value state (see spec: State Storage). The second
+   * argument is the scope string, or `{ scope?, storage? }` to choose the
+   * store as well (`storage: 'device'` needs capability `state.storage`).
+   */
   readonly state = {
     get: async (
       keys?: string[],
-      scope?: StateScope
+      options?: StateScope | StateOptions
     ): Promise<Record<string, unknown>> => {
       const result = (await this.call('state.get', {
-        ...(scope ? { scope } : {}),
+        ...stateOptions(options),
         ...(keys ? { keys } : {})
-      })) as { values: Record<string, unknown> }
+      } satisfies StateGetParams)) as { values: Record<string, unknown> }
       return result.values ?? {}
     },
     set: async (
       values: Record<string, unknown>,
-      scope?: StateScope
+      options?: StateScope | StateOptions
     ): Promise<void> => {
       await this.call('state.set', {
-        ...(scope ? { scope } : {}),
+        ...stateOptions(options),
         values
-      })
+      } satisfies StateSetParams)
     }
   }
 
@@ -516,6 +523,15 @@ export class ExtensionClient {
 
   close(): void {
     this.endpoint.close()
+  }
+}
+
+function stateOptions(options?: StateScope | StateOptions): StateOptions {
+  const { scope, storage } =
+    typeof options === 'string' ? { scope: options, storage: undefined } : (options ?? {})
+  return {
+    ...(scope ? { scope } : {}),
+    ...(storage ? { storage } : {})
   }
 }
 
