@@ -1088,12 +1088,21 @@ export interface OverlayFrameResult {
   reason?: OverlayFrameRefusal
 }
 
-/** Payload of an `overlay.state` host event — an overlay was shown, hidden, faded, suspended or resumed. */
+/**
+ * Payload of an `overlay.state` host event — an overlay was shown, hidden,
+ * faded, suspended or resumed, or its granted live-frame interval changed.
+ */
 export interface OverlayStateEvent {
   overlayId: string
   visible: boolean
   opacity: number
   suspended: boolean
+  /**
+   * The live-frame interval, in ms, the host now grants this image overlay,
+   * sent when it changes without a new request (capability
+   * `overlays.animated`). Pace by the latest value from a request or this event.
+   */
+  liveInterval?: number
 }
 
 /**

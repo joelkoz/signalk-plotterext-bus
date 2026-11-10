@@ -1747,6 +1747,19 @@ describe('overlay helpers', () => {
     expect(seen[0].liveInterval).toBe(200)
   })
 
+  it('carries a changed live-frame pace in overlay.state', async () => {
+    const { client, host } = await overlaysRig()
+    const states: OverlayStateEvent[] = []
+    await client.subscribe(['overlay.state'], (_n, p) => states.push(p as OverlayStateEvent))
+    const slowed: OverlayStateEvent = {
+      overlayId: 'wind-flow', visible: true, opacity: 1, suspended: false, liveInterval: 66
+    }
+    host.publish('overlay.state', slowed)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(states).toEqual([slowed])
+    expect(states[0].liveInterval).toBe(66)
+  })
+
   it('tells an overlay configuration panel which overlay it configures', async () => {
     const { client } = await rig({
       context: {
