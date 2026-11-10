@@ -287,6 +287,10 @@ await client.subscribe(['state.changed'], async () => {
   reconfigure(values)
 })
 
+// A per-device choice (capability `state.storage`): stays in this browser,
+// separate from the values that follow the user
+await client.state.set({ titleBars }, { scope: 'extension', storage: 'device' })
+
 // Visible routes (capability `routes`)
 if (client.hasCapability('routes')) {
   // A route needs at least two points (one segment).

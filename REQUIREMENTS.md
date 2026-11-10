@@ -77,8 +77,10 @@ specification (proposed to `SignalK/signalk-server` under
 - `call`, `notify`, and `subscribe(patterns, handler)` (which performs both
   local dispatch registration and the host-side `events.subscribe`, and
   returns an async unsubscribe that tears down both).
-- `state.get(keys?, scope?)` / `state.set(values, scope?)` wrapping the
-  host's `state.*` methods.
+- `state.get(keys?, options?)` / `state.set(values, options?)` wrapping the
+  host's `state.*` methods. `options` is a `StateScope` string or a
+  `StateOptions` object `{ scope?, storage? }` (`StateStorage`: `'user'` |
+  `'device'`, capability `state.storage`); only the fields given are sent.
 - `signalk.subscribe(paths, handler)`: subscribes to `sk.<path>` events
   *and* calls the host's `signalk.subscribe`; the unsubscribe function
   reverses both. `signalk.put(path, value)` wraps `signalk.put`.

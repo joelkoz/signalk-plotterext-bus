@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.25.0
+
+Per-device state. Additive; `BUS_ID` stays `plotterExt/1`.
+
+- **State storage** (capability `state.storage`). `state.get` / `state.set`
+  take an optional `storage`: `'user'` (the default; follows the user's
+  settings to every device) or `'device'` (this device only, never sent to the
+  server). It is independent of `scope`, and the two stores are separate.
+  `state.changed` carries `storage`; its absence means `'user'`.
+- **Client:** the second argument of `client.state.get(keys?, …)` and
+  `client.state.set(values, …)` takes the existing scope string or an options
+  object `{ scope?, storage? }`.
+- **New types:** `StateStorage`, `StateOptions`, `StateGetParams`,
+  `StateSetParams`; `StateChangedEvent` gains `storage?`.
+- Spec: Plotter Extensions API, "State storage".
+
 ## 0.24.0
 
 Button decorations. Additive; `BUS_ID` stays `plotterExt/1`.

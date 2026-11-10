@@ -184,9 +184,35 @@ export interface SignalKValueEvent {
 
 export type StateScope = 'instance' | 'extension'
 
+/**
+ * Where a `state.*` value is kept (capability `state.storage`): `'user'` (the
+ * default) follows the user's settings to every device and may be preset from
+ * server-wide defaults; `'device'` stays on this device and is never sent to the
+ * server. The two stores are separate: a read returns only the store it names.
+ */
+export type StateStorage = 'user' | 'device'
+
+/** Which state a `state.get` / `state.set` addresses; both default per spec. */
+export interface StateOptions {
+  scope?: StateScope
+  storage?: StateStorage
+}
+
+/** Params of a `state.get` call. */
+export interface StateGetParams extends StateOptions {
+  keys?: string[]
+}
+
+/** Params of a `state.set` call. */
+export interface StateSetParams extends StateOptions {
+  values: Record<string, unknown>
+}
+
 /** Payload of a `state.changed` host event. */
 export interface StateChangedEvent {
   scope: StateScope
+  /** The store that changed; absent from a host without `state.storage`, meaning `'user'`. */
+  storage?: StateStorage
   instanceId?: string | null
   keys: string[]
 }
