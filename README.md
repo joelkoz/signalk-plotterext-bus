@@ -253,6 +253,19 @@ not the pick is still on.
 | `map.pickBusy` | The user is in a modal interaction (drawing, measuring, editing) that a pick must not interrupt. |
 | `map.notSupported` | The host does not implement `map.pick`. |
 
+### Resource display error reasons
+
+`resources.show` and `resources.hide` (capability `resources.display`) reject
+with a JSON-RPC error whose `error.data.reason` is a
+`ResourceDisplayErrorReason` string. Both resolve to `{}`; an id that names no
+existing resource is ignored, not rejected.
+
+| `reason` | Meaning |
+| --- | --- |
+| `resources.badRequest` | Malformed params — a missing or non-string `type`, or `ids` that is not a non-empty array of strings. |
+| `resources.typeNotSupported` | The host cannot carry out this call for this type; `error.data.type` names it. A host that can only switch a type on or off as a whole accepts `show` and rejects `hide` with this. |
+| `resources.notSupported` | The host does not implement `resources.display`. |
+
 ### Resource-group error reasons
 
 A failing `resourceGroup.*` host method rejects with a JSON-RPC error whose
@@ -420,6 +433,16 @@ import { boundsLonSpan, boundsContainsLon, normalizeBounds } from 'signalk-plott
 // boundsLonSpan([175, -21, -175, -13])          // 10
 // boundsContainsLon([175, -21, -175, -13], 179) // true
 // normalizeBounds([175, -21, 185, -13])          // [175, -21, -175, -13] — from a map library's unwrapped box
+
+// Show or hide one stored resource (capability `resources.display`) without
+// touching the rest of its type. Create/edit/delete through the server's
+// resources API; then show the new id, since the user may have narrowed the
+// type's display to a chosen few. Routes and charts are accepted too, but have
+// richer interfaces in `client.route` and `client.chart`.
+if (client.hasCapability('resources.display')) {
+  await client.resources.show('waypoints', [newWaypointId])
+  await client.resources.hide('notes', [noteId]) // may reject: resources.typeNotSupported
+}
 
 // Resource groups (capability `resourceGroups`) — switch the chart to a stored
 // group. Create/edit/list groups through the server's resources API

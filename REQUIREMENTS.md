@@ -217,6 +217,16 @@ specification (proposed to `SignalK/signalk-server` under
   `badge?: number`, each also `null`). Sends only the decorations given.
   Failures reject with a `ButtonErrorReason`. Contract: the spec ("Decorating
   buttons").
+- `resources.*` (capability `resources.display`): typed wrappers for showing and
+  hiding individual stored resources. Surface: `resources.show(type, ids)` and
+  `resources.hide(type, ids)` → `void` (over `resources.show` / `resources.hide`,
+  `ResourceDisplayParams` `{ type, ids }`). `type` is a `DisplayResourceType`
+  (`routes`/`waypoints`/`regions`/`notes`/`charts`, or any other string a host
+  accepts). Resource CRUD is deliberately **not** wrapped — it is the server's
+  resources API. `resources.list` / `setFilter` / `clearFilter` stay on the
+  generic `call()`. Failures reject with a `ResourceDisplayErrorReason`
+  (`resources.badRequest`/`typeNotSupported`/`notSupported`). Contract: the spec
+  ("Showing and hiding stored resources").
 - `resourceGroup.*` (capability `resourceGroups`): typed wrapper for applying a
   stored resource group (`/resources/groups/{id}`) to the host's display.
   Surface: `resourceGroup.apply(id)` → `ResourceGroupApplyResult`
@@ -325,6 +335,12 @@ Must stay covered (vitest, Node, no DOM):
   calls `ui.listPanels` and unwraps `panels`, generic `call()` path returns the
   raw result, `panel.state` delivered only to a subscribed context,
   `panels.notSupported` reason propagation.
+- `resources.*` display helper conformance: `resources.display` advertised,
+  `show` adds and `hide` removes only the listed ids (params `{ type, ids }` on
+  the wire), routes carried like any type, a layer-only type accepts `show` and
+  rejects `hide` with `resources.typeNotSupported` (with `data.type`), an
+  undisplayed type rejected with `resources.typeNotSupported`, empty `ids`
+  rejected with `resources.badRequest`, generic `call()` path.
 - `resourceGroup.*` helper conformance: `resourceGroups` capability advertised,
   `[ids]` replaces / `[]` clears / absent key leaves a type's display, a type the
   host does not act on is omitted from `applied`, `resourceGroup.applied` emitted
