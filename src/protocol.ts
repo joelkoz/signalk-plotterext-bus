@@ -776,6 +776,41 @@ export interface DecorateButtonsParams extends ButtonDecorations {
 }
 
 /**
+ * Types for the `resources.display` capability — showing and hiding individual
+ * stored resources. It changes the user's own display choice, the way ticking
+ * one waypoint in the host's list does; a `resources.setFilter` filter still
+ * applies on top. Creating, editing and deleting resources is not part of it:
+ * use the server's resources API, then `resources.show` the new id. See the
+ * Plotter Extensions API spec, "Showing and hiding stored resources".
+ */
+
+/**
+ * A resource collection whose display can be changed. The spec defines these
+ * five; a host may accept any other type it displays, so any string is allowed.
+ * Routes and charts have richer interfaces of their own (`route.*`, `chart.*`).
+ */
+export type DisplayResourceType =
+  | 'routes'
+  | 'waypoints'
+  | 'regions'
+  | 'notes'
+  | 'charts'
+  | (string & {})
+
+/** Params of `resources.show` and `resources.hide`. */
+export interface ResourceDisplayParams {
+  type: DisplayResourceType
+  /** Resource ids (the keys of `/resources/<type>`); non-empty. Unknown ids are ignored. */
+  ids: string[]
+}
+
+/** Stable `error.data.reason` strings for `resources.show` / `resources.hide` failures. */
+export type ResourceDisplayErrorReason =
+  | 'resources.badRequest'
+  | 'resources.typeNotSupported'
+  | 'resources.notSupported'
+
+/**
  * Types for the `resourceGroups` capability — applying a stored resource group
  * to the host's display. Groups are ordinary Signal K resources in the `groups`
  * collection; an extension creates, edits and lists them through the server's

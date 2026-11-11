@@ -23,7 +23,9 @@ import {
   PanelListResult,
   PanelState,
   PublishScope,
+  DisplayResourceType,
   ReadyParams,
+  ResourceDisplayParams,
   ResourceGroupApplyResult,
   RouteData,
   RoutePoint,
@@ -425,6 +427,28 @@ export class ExtensionClient {
     list: async (): Promise<WindowState[]> => {
       const r = (await this.call('ui.listWindows')) as WindowListResult
       return r.windows
+    }
+  }
+
+  /**
+   * Show and hide individual stored resources — one waypoint, note, region,
+   * route or chart — without touching the rest of that type (capability
+   * `resources.display`). `show` never hides anything; `hide` never hides
+   * anything unlisted. Ids the host has not seen yet are accepted, so a
+   * resource just created through the server's resources API can be shown
+   * straight away. A host that cannot change a type's display rejects with
+   * `resources.typeNotSupported`. Routes and charts have richer interfaces in
+   * `route` and `chart`. Resource queries and filters (`resources.list`,
+   * `resources.setFilter`) go through `client.call`. A plain-JS extension can
+   * call `client.call('resources.show' | 'resources.hide', { type, ids })`
+   * directly with no behavioural difference.
+   */
+  readonly resources = {
+    show: async (type: DisplayResourceType, ids: string[]): Promise<void> => {
+      await this.call('resources.show', { type, ids } satisfies ResourceDisplayParams)
+    },
+    hide: async (type: DisplayResourceType, ids: string[]): Promise<void> => {
+      await this.call('resources.hide', { type, ids } satisfies ResourceDisplayParams)
     }
   }
 

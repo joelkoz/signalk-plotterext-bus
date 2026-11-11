@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.26.0
+
+Showing and hiding individual stored resources. Additive; `BUS_ID` stays `plotterExt/1`.
+
+- **Resource display** (capability `resources.display`). New client helpers
+  `client.resources.show(type, ids)` and `client.resources.hide(type, ids)` over
+  `resources.show` / `resources.hide`: display one waypoint, note, region, route
+  or chart without touching the rest of its type. `show` never hides anything,
+  `hide` never hides anything unlisted, and ids the host has not seen yet are
+  accepted, so a resource just created through the server's resources API can be
+  shown straight away. Resource CRUD stays on the server's API.
+- **New types:** `DisplayResourceType`, `ResourceDisplayParams`,
+  `ResourceDisplayErrorReason` (`resources.badRequest`,
+  `resources.typeNotSupported`, `resources.notSupported`).
+- Spec: Plotter Extensions API, "Showing and hiding stored resources".
+
 ## 0.25.0
 
 Per-device state and animated image overlays. Additive; `BUS_ID` stays `plotterExt/1`.

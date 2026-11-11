@@ -1381,6 +1381,116 @@ describe('resourceGroup helpers', () => {
   })
 })
 
+describe('resources.show / resources.hide helpers', () => {
+  // A tiny in-memory host mirroring the `resources.display` capability. It
+  // tracks display per id for waypoints and routes, can only switch notes on or
+  // off as a whole layer, and does not display tracks at all — so it exercises
+  // the coarser-host rules: show may display the whole type, hide is rejected.
+  interface DisplayRig extends Rig {
+    shown: { waypoints: Set<string>; routes: Set<string> }
+    notesLayerOn: { value: boolean }
+    calls: unknown[]
+  }
+
+  async function displayRig(): Promise<DisplayRig> {
+    const shown = { waypoints: new Set(['w0']), routes: new Set<string>() }
+    const notesLayerOn = { value: false }
+    const calls: unknown[] = []
+    const handle = (params: unknown, visible: boolean) => {
+      calls.push(params)
+      const { type, ids } = (params ?? {}) as { type?: unknown; ids?: unknown }
+      if (
+        typeof type !== 'string' ||
+        !Array.isArray(ids) ||
+        ids.length === 0 ||
+        !ids.every((id) => typeof id === 'string')
+      ) {
+        throw new RpcError('type and non-empty ids required', {
+          reason: 'resources.badRequest'
+        })
+      }
+      if (type === 'waypoints' || type === 'routes') {
+        for (const id of ids as string[]) {
+          if (visible) shown[type].add(id)
+          else shown[type].delete(id)
+        }
+        return {}
+      }
+      if (type === 'notes' && visible) {
+        notesLayerOn.value = true
+        return {}
+      }
+      throw new RpcError(`cannot ${visible ? 'show' : 'hide'} ${type}`, {
+        reason: 'resources.typeNotSupported',
+        data: { type }
+      })
+    }
+    const r = (await rig({
+      hostInfo: {
+        ...HOST_INFO,
+        capabilities: [...HOST_INFO.capabilities, 'resources.display']
+      },
+      methods: {
+        'resources.show': (params) => handle(params, true),
+        'resources.hide': (params) => handle(params, false)
+      }
+    })) as DisplayRig
+    r.shown = shown
+    r.notesLayerOn = notesLayerOn
+    r.calls = calls
+    return r
+  }
+
+  it('advertises the resources.display capability', async () => {
+    const { client } = await displayRig()
+    expect(client.hasCapability('resources.display')).toBe(true)
+  })
+
+  it('show adds to the display and hide removes only the listed ids', async () => {
+    const { client, shown, calls } = await displayRig()
+    await client.resources.show('waypoints', ['w1', 'w2'])
+    expect([...shown.waypoints]).toEqual(['w0', 'w1', 'w2'])
+    await client.resources.hide('waypoints', ['w1'])
+    expect([...shown.waypoints]).toEqual(['w0', 'w2'])
+    expect(calls[0]).toEqual({ type: 'waypoints', ids: ['w1', 'w2'] })
+  })
+
+  it('carries routes like any other type', async () => {
+    const { client, shown } = await displayRig()
+    await client.resources.show('routes', ['r1'])
+    expect([...shown.routes]).toEqual(['r1'])
+  })
+
+  it('lets a layer-only host satisfy show but reject hide', async () => {
+    const { client, notesLayerOn } = await displayRig()
+    await client.resources.show('notes', ['n1'])
+    expect(notesLayerOn.value).toBe(true)
+    const err = await client.resources.hide('notes', ['n1']).catch((e: RpcError) => e)
+    expect(err).toBeInstanceOf(RpcError)
+    expect((err as RpcError).reason).toBe('resources.typeNotSupported')
+    expect((err as RpcError).data).toMatchObject({ type: 'notes' })
+  })
+
+  it('rejects a type the host does not display with resources.typeNotSupported', async () => {
+    const { client } = await displayRig()
+    const err = await client.resources.show('tracks', ['t1']).catch((e: RpcError) => e)
+    expect((err as RpcError).reason).toBe('resources.typeNotSupported')
+  })
+
+  it('rejects empty ids with resources.badRequest', async () => {
+    const { client } = await displayRig()
+    const err = await client.resources.show('waypoints', []).catch((e: RpcError) => e)
+    expect((err as RpcError).reason).toBe('resources.badRequest')
+  })
+
+  it('exposes resources.show through the generic call() too (JS path)', async () => {
+    const { client, shown } = await displayRig()
+    const res = await client.call('resources.show', { type: 'waypoints', ids: ['w9'] })
+    expect(res).toEqual({})
+    expect(shown.waypoints.has('w9')).toBe(true)
+  })
+})
+
 describe('windows helpers', () => {
   // A tiny in-memory host mirroring the `windows` capability: it records every
   // call so the tests can check what the wrappers put on the wire, and keeps a
