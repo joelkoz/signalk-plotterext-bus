@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.27.0
+
+How the host draws its panels. Additive; `BUS_ID` stays `plotterExt/1`.
+
+- **Display** (capability `display`). New client helper `client.display.get()`
+  over `display.get`, returning `{ panelOpacity, colorScheme }`, and the
+  `display.changed` event carrying the same state whenever either field
+  changes. `panelOpacity` is the background opacity (0..1) the user chose for
+  every panel on the chart, or `null` when each panel keeps its own look;
+  `colorScheme` (`'light' | 'dark'`) is the theme the host currently shows, so
+  a widget can follow the host instead of its own `prefers-color-scheme`.
+- **New types:** `DisplayState`, `DisplayChangedEvent`, `ColorScheme`,
+  `DisplayErrorReason` (`display.notSupported`).
+- Spec: Plotter Extensions API, "Panel appearance".
+
 ## 0.26.0
 
 Showing and hiding individual stored resources. Additive; `BUS_ID` stays `plotterExt/1`.

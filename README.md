@@ -178,6 +178,15 @@ A failing `nightMode.*` host method rejects with a JSON-RPC error whose
 | `nightMode.badRequest` | Malformed params — e.g. a non-boolean `enabled`/`auto`, or neither field present. |
 | `nightMode.notSupported` | The host does not implement night mode. |
 
+### Display error reasons
+
+A failing `display.*` host method rejects with a JSON-RPC error whose
+`error.data.reason` is one of the stable `DisplayErrorReason` strings.
+
+| `reason` | Meaning |
+| --- | --- |
+| `display.notSupported` | The host does not implement the `display` capability. |
+
 ### Window error reasons
 
 A failing window method (`ui.openWindow`, `ui.updateWindow`, `ui.focusWindow`,
@@ -349,6 +358,18 @@ if (client.hasCapability('nightMode')) {
   // Force on / force off / follow the server:
   // await client.nightMode.set({ enabled: true })   // force on (auto -> false)
   // await client.nightMode.set({ auto: true })       // follow environment.mode
+}
+
+// Panel look (capability `display`) — draw the widget's card like the host's
+// own panels: the host's light/dark theme, and the background opacity the user
+// chose for every panel on the chart (null: keep the widget's own look).
+if (client.hasCapability('display')) {
+  const apply = ({ panelOpacity, colorScheme }) => {
+    document.documentElement.style.colorScheme = colorScheme
+    setCardOpacity(panelOpacity ?? MY_DEFAULT_OPACITY) // card background only
+  }
+  apply(await client.display.get())
+  await client.subscribe(['display.changed'], (_name, state) => apply(state))
 }
 
 // Floating windows (capability `windows`) — show one of this extension's

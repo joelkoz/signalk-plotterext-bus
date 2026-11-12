@@ -4,6 +4,7 @@ import {
   ButtonDecorations,
   ChartLayer,
   DecorateButtonsParams,
+  DisplayState,
   EVENT_HANDSHAKE,
   EVENT_READY,
   Handshake,
@@ -336,6 +337,18 @@ export class ExtensionClient {
     },
     set: async (state: Partial<NightModeState>): Promise<void> => {
       await this.call('nightMode.set', state)
+    }
+  }
+
+  /**
+   * How the host draws the panels on its chart (capability `display`). Read
+   * the current `{ panelOpacity, colorScheme }` state and follow changes by
+   * subscribing to the `display.changed` event (`DisplayChangedEvent`). The
+   * state is read-only; the user chooses it in the host.
+   */
+  readonly display = {
+    get: async (): Promise<DisplayState> => {
+      return (await this.call('display.get')) as DisplayState
     }
   }
 
