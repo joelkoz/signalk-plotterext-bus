@@ -491,6 +491,46 @@ export type NightModeErrorReason =
   | 'nightMode.notSupported'
 
 /**
+ * Types for the `display` capability — how the host draws the panels on its
+ * chart, so an extension's widget can look like them. Read-only: the user
+ * chooses these in the host. See the Plotter Extensions API spec, "Panel
+ * appearance".
+ */
+
+/** The host's light or dark theme, in CSS `color-scheme` terms. */
+export type ColorScheme = 'light' | 'dark'
+
+/**
+ * The host's display state — the `display.get` result and the payload of the
+ * `display.changed` event.
+ */
+export interface DisplayState {
+  /**
+   * The background opacity (0..1) the user chose for panels on the chart, or
+   * `null` when they made no common choice and each panel keeps its own look.
+   * An extension applies it to its card background only; text and marks stay
+   * opaque.
+   */
+  panelOpacity: number | null
+  /**
+   * The theme the host currently shows (the resolved state, whatever decided
+   * it). An extension that follows the host's theme reads this instead of its
+   * own `prefers-color-scheme`, which can disagree with the host. Night mode
+   * still applies on top.
+   */
+  colorScheme: ColorScheme
+}
+
+/**
+ * Payload of a `display.changed` host event — a field of the display state
+ * changed. Carries the full state. Emitted **origin-transparently**.
+ */
+export type DisplayChangedEvent = DisplayState
+
+/** Stable `error.data.reason` strings for `display.*` host-method failures. */
+export type DisplayErrorReason = 'display.notSupported'
+
+/**
  * Types for the `map` capability — the chart viewport. An extension reads it
  * with `map.getView`, drives it with `map.center` / `map.fitBounds`, and follows
  * it with the `map.view` event. See the Plotter Extensions API spec, "Map view".

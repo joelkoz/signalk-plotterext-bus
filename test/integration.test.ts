@@ -12,6 +12,8 @@ import {
   ChartTimeEvent,
   ChartVisibilityEvent,
   DecorateButtonsParams,
+  DisplayChangedEvent,
+  DisplayState,
   MapPickParams,
   MapPickedEvent,
   MapTarget,
@@ -1123,6 +1125,86 @@ describe('nightMode helpers', () => {
     const res = await client.call('nightMode.set', { enabled: true })
     expect(res).toEqual({})
     expect(await client.call('nightMode.get')).toEqual({ enabled: true, auto: false })
+  })
+})
+
+describe('display helpers', () => {
+  // A tiny in-memory host mirroring the `display` capability: read-only state
+  // the user changes in the host. Every change publishes display.changed with
+  // the full state.
+  interface DisplayRig extends Rig {
+    userChooses: (change: Partial<DisplayState>) => void
+  }
+
+  async function displayRig(
+    initial: DisplayState = { panelOpacity: null, colorScheme: 'light' }
+  ): Promise<DisplayRig> {
+    const state: DisplayState = { ...initial }
+    const r = (await rig({
+      hostInfo: {
+        ...HOST_INFO,
+        capabilities: [...HOST_INFO.capabilities, 'display']
+      },
+      methods: { 'display.get': () => ({ ...state }) }
+    })) as DisplayRig
+    r.userChooses = (change) => {
+      Object.assign(state, change)
+      r.host.publish('display.changed', { ...state })
+    }
+    return r
+  }
+
+  it('advertises the display capability', async () => {
+    const { client } = await displayRig()
+    expect(client.hasCapability('display')).toBe(true)
+  })
+
+  it('get returns { panelOpacity, colorScheme }, null opacity included', async () => {
+    const { client } = await displayRig()
+    expect(await client.display.get()).toEqual({
+      panelOpacity: null,
+      colorScheme: 'light'
+    })
+  })
+
+  it('display.changed carries the full state when either field changes', async () => {
+    const { client, userChooses } = await displayRig({
+      panelOpacity: 0.7,
+      colorScheme: 'light'
+    })
+    const events: DisplayChangedEvent[] = []
+    await client.subscribe(['display.changed'], (_n, p) =>
+      events.push(p as DisplayChangedEvent)
+    )
+    userChooses({ colorScheme: 'dark' })
+    userChooses({ panelOpacity: 1 })
+    await new Promise((r) => setTimeout(r, 20))
+    expect(events).toEqual([
+      { panelOpacity: 0.7, colorScheme: 'dark' },
+      { panelOpacity: 1, colorScheme: 'dark' }
+    ])
+    expect(await client.display.get()).toEqual({ panelOpacity: 1, colorScheme: 'dark' })
+  })
+
+  it('rejects with display.notSupported from a host without it', async () => {
+    const { client } = await rig({
+      methods: {
+        'display.get': () => {
+          throw new RpcError('no display', { reason: 'display.notSupported' })
+        }
+      }
+    })
+    const err = await client.display.get().catch((e: RpcError) => e)
+    expect(err).toBeInstanceOf(RpcError)
+    expect((err as RpcError).reason).toBe('display.notSupported')
+  })
+
+  it('exposes display.get through the generic call() too (JS path)', async () => {
+    const { client } = await displayRig({ panelOpacity: 0.85, colorScheme: 'dark' })
+    expect(await client.call('display.get')).toEqual({
+      panelOpacity: 0.85,
+      colorScheme: 'dark'
+    })
   })
 })
 

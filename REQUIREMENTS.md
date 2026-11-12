@@ -124,6 +124,14 @@ specification (proposed to `SignalK/signalk-server` under
   reject with a stable `error.data.reason` from `NightModeErrorReason`
   (`nightMode.badRequest`/`notSupported`). Authoritative method/event contract lives
   in the Plotter Extensions API spec ("Night mode").
+- `display.*` (capability `display`): a typed read of how the host draws the
+  panels on its chart. Surface: `display.get()` → `DisplayState`
+  (`{ panelOpacity: number | null, colorScheme: 'light' | 'dark' }`). Read-only:
+  the user chooses it in the host. Changes are followed via the `display.changed`
+  event (`DisplayChangedEvent`), which carries the full state whenever either field
+  changes. Failures reject with a stable `error.data.reason` from
+  `DisplayErrorReason` (`display.notSupported`). Authoritative method/event
+  contract lives in the Plotter Extensions API spec ("Panel appearance").
 - `windows.*` (capability `windows`): typed wrappers over the host's floating
   windows — an extension's iframe panels shown over the chart, each its own
   `window` context (`HandshakeContext.windowId` + `params`). Surface:
@@ -309,6 +317,10 @@ Must stay covered (vitest, Node, no DOM):
   even while `auto`+server say night), follow-server derives `enabled` from
   `environment.mode` and re-emits `nightMode.changed` on a server-mode flip,
   `nightMode.badRequest` on an empty set, generic `call()` path.
+- `display.*` helper conformance: `display` capability advertised,
+  `display.get` returns `{ panelOpacity, colorScheme }` (a `null` opacity
+  included), `display.changed` carries the full state when either field changes,
+  `display.notSupported` reason propagation, generic `call()` path.
 - `windows.*` helper conformance: `windows` capability advertised, a `window`
   context handshake carries `windowId` + `params`, `open` sends its params
   verbatim and returns the state, `update`/`focus`/`close`/`list` address a
